@@ -1,6 +1,6 @@
 """
 llh client:
-packages messages, sends them to the llh client, and interprets replies
+packages messages, sends them to the llh service, and interprets replies
 provides synchronous and asynchronous interfaces
 """
 
@@ -62,7 +62,7 @@ class LLHClient:
         if len(x) * len(mus) > self._max_obs_per_batch:
             raise ValueError(
                 "len(x)*n_hypos must be <= the maximum batch size!"
-                " (In this case {self._max_obs_per_batch})"
+                f" (In this case {self._max_obs_per_batch})"
             )
 
         if len(mus) > self._max_hypos_per_batch:

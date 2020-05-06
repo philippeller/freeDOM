@@ -85,6 +85,5 @@ def main():
     plt.savefig(f"plots/test_{mu}_{n_obs}.png", bbox="tight")
 
 
-
 if __name__ == "__main__":
     sys.exit(main())

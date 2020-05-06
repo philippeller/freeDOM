@@ -64,9 +64,7 @@ class LLHService:
         # yielding the -1 below. This should be made more general
         self._n_hypo_params = n_features - 1
 
-        self._table = np.zeros(
-            (self._n_table_rows, n_features), dtype=np.float32
-        )
+        self._table = np.zeros((self._n_table_rows, n_features), dtype=np.float32)
 
         self._stop_inds = np.full(self._n_hypos + 1, self._n_table_rows, np.int32)
         self._next_table_ind = 0
@@ -95,7 +93,7 @@ class LLHService:
 
         self._init_sockets(req_addr=req_addr, ctrl_addr=ctrl_addr)
 
-    #@profile
+    # @profile
     def start_work_loop(self):
         flush_period = self._flush_period
         self._last_flush = time.time()
@@ -133,7 +131,7 @@ class LLHService:
         self._req_sock = req_sock
         self._ctrl_sock = ctrl_sock
 
-    #@profile
+    # @profile
     def _process_message(self, msg_parts):
         client_id, req_id, x, theta = msg_parts
 
