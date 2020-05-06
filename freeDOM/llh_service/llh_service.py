@@ -50,6 +50,8 @@ class LLHService:
         n_features,
         batch_size,
         transform_params,
+        send_hwm,
+        recv_hwm,
     ):
         self._eval_llh = eval_llh.eval_llh
 
@@ -91,7 +93,9 @@ class LLHService:
         self._ctrl_sock = None
         self._last_flush = 0
 
-        self._init_sockets(req_addr=req_addr, ctrl_addr=ctrl_addr)
+        self._init_sockets(
+            req_addr=req_addr, ctrl_addr=ctrl_addr, send_hwm=send_hwm, recv_hwm=recv_hwm
+        )
 
     # @profile
     def start_work_loop(self):
@@ -120,9 +124,12 @@ class LLHService:
             if time.time() - self._last_flush > flush_period:
                 self._flush()
 
-    def _init_sockets(self, req_addr, ctrl_addr):
+    def _init_sockets(self, req_addr, ctrl_addr, send_hwm, recv_hwm):
         ctxt = zmq.Context.instance()
+
         req_sock = ctxt.socket(zmq.ROUTER)
+        req_sock.setsockopt(zmq.SNDHWM, send_hwm)
+        req_sock.setsockopt(zmq.RCVHWM, recv_hwm)
         req_sock.bind(req_addr)
 
         ctrl_sock = ctxt.socket(zmq.PULL)
