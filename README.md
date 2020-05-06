@@ -1,4 +1,4 @@
-# freeDOM
+# *free*DOM
 
 Likelihood reconstruction using machine learning for arbitrary detector geometries
 
