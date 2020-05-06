@@ -133,7 +133,8 @@ class LLHService:
 
     # @profile
     def _process_message(self, msg_parts):
-        client_id, req_id, x, theta = msg_parts
+        header_frames = msg_parts[:-2]
+        x, theta = msg_parts[-2:]
 
         x = np.frombuffer(x, np.float32)
 
@@ -179,8 +180,7 @@ class LLHService:
         # record work request information
         work_item_dict = {}
 
-        work_item_dict["client_id"] = client_id
-        work_item_dict["req_id"] = req_id
+        work_item_dict["header_frames"] = header_frames
         work_item_dict["start_ind"] = hypo_ind
         work_item_dict["stop_ind"] = stop_hypo_ind
 
@@ -239,12 +239,8 @@ class LLHService:
         for work_req in work_reqs:
             llh_slice = llhs[work_req["start_ind"] : work_req["stop_ind"]]
 
-            # send back req_id for debugging
-            req_id_bytes = work_req["req_id"]
+            self._req_sock.send_multipart(work_req["header_frames"] + [llh_slice])
 
-            self._req_sock.send_multipart(
-                [work_req["client_id"], req_id_bytes, llh_slice]
-            )
         if len(work_reqs) > 0:
             stop = time.time()
 

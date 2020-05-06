@@ -59,7 +59,6 @@ def main():
     # in batches of the max size
     batch_size = client.max_hypos_per_batch
     mus = np.linspace(-1.0, 1.0, n_eval).reshape(int(n_eval / batch_size), batch_size)
-    print(mus.shape)
     sigs = np.repeat(sig, batch_size)
 
     now = time.time()
