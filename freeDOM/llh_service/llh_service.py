@@ -33,7 +33,8 @@ class LLHService:
         "_n_table_rows",
         "_n_hypos",
         "_n_hypo_params",
-        "_table",
+        "_x_table",
+        "_theta_table",
         "_stop_inds",
         "_next_table_ind",
         "_next_hypo_ind",
@@ -72,9 +73,11 @@ class LLHService:
         # yielding the -1 below. This should be made more general
         self._n_hypo_params = n_features - 1
 
-        self._table = np.zeros((self._n_table_rows, n_features), dtype=np.float32)
-
-        self._stop_inds = np.full(self._n_hypos + 1, self._n_table_rows, np.int32)
+        self._x_table = np.zeros((self._n_table_rows, 1), dtype=np.float32)
+        self._theta_table = np.zeros(
+            (self._n_hypos, self._n_hypo_params), dtype=np.float32
+        )
+        self._stop_inds = np.full(self._n_hypos, self._n_table_rows, np.int32)
         self._next_table_ind = 0
         self._next_hypo_ind = 0
 
@@ -85,8 +88,9 @@ class LLHService:
 
         # trace-compile the llh function in advance
         self._eval_llh(
-            tf.constant(self._table, tf.float32),
-            tf.constant(self._stop_inds, tf.int32),
+            tf.constant(self._x_table),
+            tf.constant(self._theta_table),
+            tf.constant(self._stop_inds),
             self._model,
         )
 
@@ -180,10 +184,8 @@ class LLHService:
             stop_hypo_ind = batch_size
 
         # fill table with observations and hypothesis parameters
-        table = self._table
-        table[next_ind:stop_ind, 0] = np.tile(x, batch_size)
-        for i in range(self._n_hypo_params):
-            table[next_ind:stop_ind, i + 1] = np.repeat(thetas[:, i], n_obs)
+        self._x_table[next_ind:stop_ind] = np.tile(x, batch_size)[:, np.newaxis]
+        self._theta_table[hypo_ind:stop_hypo_ind] = thetas
 
         # update stop indices
         next_stop = next_ind + n_obs
@@ -193,9 +195,7 @@ class LLHService:
 
         # record work request information
         work_item_dict = dict(
-            header_frames=header_frames,
-            start_ind=hypo_ind,
-            stop_ind=stop_hypo_ind,
+            header_frames=header_frames, start_ind=hypo_ind, stop_ind=stop_hypo_ind,
         )
 
         self._work_reqs.append(work_item_dict)
@@ -220,9 +220,8 @@ class LLHService:
         try:
             return self._ctrl_sock.recv_string(zmq.NOBLOCK)
         except zmq.error.Again:
-            """ this should never happen, we are receiving only after polling.
-            print a message and raise again
-            """
+            # this should never happen, we are receiving only after polling.
+            # print a message and raise again
             print(
                 "Failed to receive from ctrl sock even after"
                 " the poller indicated an event was ready!"
@@ -236,9 +235,10 @@ class LLHService:
 
         if self._work_reqs:
             wstdout("+")
-            table = tf.constant(self._table, tf.float32)
-            stop_inds = tf.constant(self._stop_inds, tf.int32)
-            llh_sums = self._eval_llh(table, stop_inds, self._model)
+            x_table = tf.constant(self._x_table)
+            theta_table = tf.constant(self._theta_table)
+            stop_inds = tf.constant(self._stop_inds)
+            llh_sums = self._eval_llh(x_table, theta_table, stop_inds, self._model)
             llhs = llh_sums.numpy()
 
             for work_req in self._work_reqs:
@@ -247,8 +247,8 @@ class LLHService:
 
         self._work_reqs.clear()
         self._next_table_ind = 0
-        self._stop_inds[:] = self._n_table_rows
         self._next_hypo_ind = 0
+        self._stop_inds[:] = self._n_table_rows
 
 
 def main():
