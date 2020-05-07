@@ -29,15 +29,19 @@ def main():
 
     client = LLHClient(req_addr=params["req_addr"], batch_size=params["batch_size"])
 
-    # evaluate llh at best true params
+    # parameters of a Gaussian distribution
     mu = float(sys.argv[1])
-    n_obs = int(sys.argv[2])
     sig = 1
 
-    # generate samples from a standard normal
+    # number of "observations", or samples,
+    # in the test experiment
+    n_obs = int(sys.argv[2])
+
+    # generate the random samples
     x = np.empty(n_obs, np.float32)
     x[:] = sig * np.random.randn(n_obs) + mu
 
+    # test a single asynchronous evaluation
     now = time.time()
     client.request_eval(x, mu, sig, req_id="test_id")
     delta = time.time() - now
@@ -49,20 +53,20 @@ def main():
 
     print(reply)
 
+    # test a single synchronous evaluation
     now = time.time()
     llh = client.eval_llh(x, mu, sig, "test2")
     delta = time.time() - now
     print(f"single LLH eval took {delta*1000:.3f} ms")
     print(llh)
 
-    # try requesting a lot of LLH evaluations
+    # test a lot of LLH evaluations
     n_eval = 40000
 
     # in batches of the max size
     batch_size = client.max_hypos_per_batch
 
     mus = np.linspace(-1.0, 1.0, n_eval).reshape(int(n_eval / batch_size), batch_size)
-    print(mus.shape)
     sigs = np.repeat(sig, batch_size)
 
     now = time.time()

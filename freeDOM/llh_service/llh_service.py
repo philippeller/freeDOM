@@ -56,6 +56,8 @@ class LLHService:
         n_features,
         batch_size,
         transform_params,
+        send_hwm,
+        recv_hwm,
     ):
         self._eval_llh = eval_llh.eval_llh
 
@@ -97,7 +99,9 @@ class LLHService:
         self._ctrl_sock = None
         self._last_flush = 0
 
-        self._init_sockets(req_addr=req_addr, ctrl_addr=ctrl_addr)
+        self._init_sockets(
+            req_addr=req_addr, ctrl_addr=ctrl_addr, send_hwm=send_hwm, recv_hwm=recv_hwm
+        )
 
     # @profile
     def start_work_loop(self):
@@ -126,9 +130,12 @@ class LLHService:
             if time.time() - self._last_flush > flush_period:
                 self._flush()
 
-    def _init_sockets(self, req_addr, ctrl_addr):
+    def _init_sockets(self, req_addr, ctrl_addr, send_hwm, recv_hwm):
         ctxt = zmq.Context.instance()
+
         req_sock = ctxt.socket(zmq.ROUTER)
+        req_sock.setsockopt(zmq.SNDHWM, send_hwm)
+        req_sock.setsockopt(zmq.RCVHWM, recv_hwm)
         req_sock.bind(req_addr)
 
         ctrl_sock = ctxt.socket(zmq.PULL)
@@ -140,7 +147,8 @@ class LLHService:
     # @profile
     def _process_message(self, msg_parts):
         wstdout(".")
-        client_id, req_id, x, theta = msg_parts
+        header_frames = msg_parts[:-2]
+        x, theta = msg_parts[-2:]
 
         x = np.frombuffer(x, np.float32)
 
@@ -185,8 +193,7 @@ class LLHService:
 
         # record work request information
         work_item_dict = dict(
-            client_id=client_id,
-            req_id=req_id,
+            header_frames=header_frames,
             start_ind=hypo_ind,
             stop_ind=stop_hypo_ind,
         )
@@ -236,13 +243,7 @@ class LLHService:
 
             for work_req in self._work_reqs:
                 llh_slice = llhs[work_req["start_ind"] : work_req["stop_ind"]]
-
-                # send back req_id for debugging
-                req_id_bytes = work_req["req_id"]
-
-                self._req_sock.send_multipart(
-                    [work_req["client_id"], req_id_bytes, llh_slice]
-                )
+                self._req_sock.send_multipart(work_req["header_frames"] + [llh_slice])
 
         self._work_reqs.clear()
         self._next_table_ind = 0
