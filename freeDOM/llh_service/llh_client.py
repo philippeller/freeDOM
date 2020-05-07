@@ -10,6 +10,7 @@ __author__ = "Aaron Fienberg"
 
 import numpy as np
 import zmq
+import uuid
 
 
 class LLHClient:
@@ -87,7 +88,7 @@ class LLHClient:
             return {"req_id": req_id.decode(), "llh": np.frombuffer(llh, np.float32)}
         return None
 
-    def eval_llh(self, x, mu, sig, req_id=None, timeout=100):
+    def eval_llh(self, x, mu, sig, timeout=1000):
         """ synchronous llh evaluation
             blocks until llh is ready
             raises RuntimeError on timeout
@@ -95,11 +96,16 @@ class LLHClient:
             Should not be used while asynchronous requests are in progress
         """
 
-        self.request_eval(x, mu, sig, req_id)
+        req_id = uuid.uuid4().hex
+
+        self.request_eval(x, mu, sig, req_id=req_id)
 
         reply = self.recv(timeout)
         if reply is None:
             raise RuntimeError("No reply from LLH service!")
+
+        if reply["req_id"] != req_id:
+            raise RuntimeError("uuid mismatch!")
 
         return reply["llh"][0]
 

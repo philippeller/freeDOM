@@ -2,12 +2,12 @@
     "req_addr": "ipc:///tmp/req1",
     "ctrl_addr": "ipc:///tmp/ctrl1",
     "poll_timeout": 1,
-    "flush_period": 5,
+    "flush_period": 1,
     "model_file": "gaussian_nn_2million.h5",
     "n_features": 3, 
     "batch_size" : {
-      "n_hypos": 1000,
-      "n_observations": 100000 
+      "n_hypos": 50,
+      "n_observations": 20000 
     },
     "transform_params": {
       "feature_means": [ 1.0894459e-02, -9.6042268e-04,  1.0048270e+01],

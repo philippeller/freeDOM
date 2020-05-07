@@ -55,7 +55,7 @@ def main():
 
     # test a single synchronous evaluation
     now = time.time()
-    llh = client.eval_llh(x, mu, sig, "test2")
+    llh = client.eval_llh(x, mu, sig)
     delta = time.time() - now
     print(f"single LLH eval took {delta*1000:.3f} ms")
     print(llh)
