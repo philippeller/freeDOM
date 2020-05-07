@@ -1,7 +1,8 @@
+#!/usr/bin/env python
+
 """
 test of llh_client/server communication
 """
-
 
 from __future__ import absolute_import, division, print_function
 
@@ -54,10 +55,12 @@ def main():
     print(f"single LLH eval took {delta*1000:.3f} ms")
     print(llh)
 
-    # try requesting 40000 evaluations
+    # try requesting a lot of LLH evaluations
     n_eval = 40000
+
     # in batches of the max size
     batch_size = client.max_hypos_per_batch
+
     mus = np.linspace(-1.0, 1.0, n_eval).reshape(int(n_eval / batch_size), batch_size)
     print(mus.shape)
     sigs = np.repeat(sig, batch_size)
@@ -74,7 +77,10 @@ def main():
 
     llhs = np.hstack([r["llh"] for r in replies])
     delta = time.time() - now
-    print(f"{n_eval} evals took {delta*1000:.3f} ms")
+    print(
+        f"{n_eval} evals took {delta*1000:.3f} ms"
+        f" ({delta/n_eval*1e6:.3f} us per eval)"
+    )
 
     try:
         os.mkdir("plots")

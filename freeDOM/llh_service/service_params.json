@@ -6,7 +6,7 @@
     "model_file": "gaussian_nn_2million.h5",
     "n_features": 3, 
     "batch_size" : {
-      "n_hypos": 100,
+      "n_hypos": 1000,
       "n_observations": 100000 
     },
     "transform_params": {

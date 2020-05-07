@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 """
 sends a "die" command to the llh service
 causes a running llh service to exit its work loop

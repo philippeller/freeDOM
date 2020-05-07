@@ -7,8 +7,8 @@ import tensorflow as tf
 
 @tf.function
 def eval_llh(input_tensor, stop_inds, model):
-    print("tracing eval_llh")
-    tf.print("executing eval_llh")
+    # print("tracing eval_llh")
+    # tf.print("executing eval_llh")
 
     # calculate n observations per LLH
     start_inds = tf.concat([[0], stop_inds[:-1]], axis=0)

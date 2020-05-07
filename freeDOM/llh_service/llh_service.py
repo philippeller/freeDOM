@@ -1,8 +1,9 @@
+#!/usr/bin/env python
+
 """
 llh service:
 listens for llh evaluation requests and processes them in batches
 """
-
 
 from __future__ import absolute_import, division, print_function
 
@@ -17,6 +18,11 @@ import tensorflow as tf
 import zmq
 
 import eval_llh
+
+
+def wstdout(s):
+    sys.stdout.write(s)
+    sys.stdout.flush()
 
 
 class LLHService:
@@ -133,6 +139,7 @@ class LLHService:
 
     # @profile
     def _process_message(self, msg_parts):
+        wstdout(".")
         client_id, req_id, x, theta = msg_parts
 
         x = np.frombuffer(x, np.float32)
@@ -172,17 +179,17 @@ class LLHService:
 
         # update stop indices
         next_stop = next_ind + n_obs
-        for i in range(hypo_ind, hypo_ind + batch_size):
-            self._stop_inds[i] = next_stop
-            next_stop += n_obs
+        self._stop_inds[hypo_ind : hypo_ind + batch_size] = np.arange(
+            next_stop, next_stop + n_obs * batch_size, n_obs
+        )
 
         # record work request information
-        work_item_dict = {}
-
-        work_item_dict["client_id"] = client_id
-        work_item_dict["req_id"] = req_id
-        work_item_dict["start_ind"] = hypo_ind
-        work_item_dict["stop_ind"] = stop_hypo_ind
+        work_item_dict = dict(
+            client_id=client_id,
+            req_id=req_id,
+            start_ind=hypo_ind,
+            stop_ind=stop_hypo_ind,
+        )
 
         self._work_reqs.append(work_item_dict)
         self._next_table_ind = stop_ind
@@ -215,42 +222,29 @@ class LLHService:
             )
             raise
 
+    # @profile
     def _flush(self):
-        start = time.time()
-
         self._last_flush = time.time()
+        wstdout("F")
 
-        work_reqs = self._work_reqs
-
-        if len(work_reqs) > 0:
-            llh_start = time.time()
-            llh_func = self._eval_llh
-            llh_sums = llh_func(
-                tf.constant(self._table, tf.float32),
-                tf.constant(self._stop_inds, tf.int32),
-                self._model,
-            )
+        if self._work_reqs:
+            wstdout("+")
+            table = tf.constant(self._table, tf.float32)
+            stop_inds = tf.constant(self._stop_inds, tf.int32)
+            llh_sums = self._eval_llh(table, stop_inds, self._model)
             llhs = llh_sums.numpy()
-            delta = time.time() - llh_start
-            print(f"llh_eval took {delta*1000:.3f} ms")
-        else:
-            llhs = []
 
-        for work_req in work_reqs:
-            llh_slice = llhs[work_req["start_ind"] : work_req["stop_ind"]]
+            for work_req in self._work_reqs:
+                llh_slice = llhs[work_req["start_ind"] : work_req["stop_ind"]]
 
-            # send back req_id for debugging
-            req_id_bytes = work_req["req_id"]
+                # send back req_id for debugging
+                req_id_bytes = work_req["req_id"]
 
-            self._req_sock.send_multipart(
-                [work_req["client_id"], req_id_bytes, llh_slice]
-            )
-        if len(work_reqs) > 0:
-            stop = time.time()
+                self._req_sock.send_multipart(
+                    [work_req["client_id"], req_id_bytes, llh_slice]
+                )
 
-            print(f"flush took {(stop-start)*1000:.1f} ms")
-
-        self._work_reqs = []
+        self._work_reqs.clear()
         self._next_table_ind = 0
         self._stop_inds[:] = self._n_table_rows
         self._next_hypo_ind = 0
