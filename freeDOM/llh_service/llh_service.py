@@ -31,6 +31,7 @@ class LLHService:
         "_eval_llh",
         "_work_reqs",
         "_n_table_rows",
+        "_n_obs_features",
         "_n_hypos",
         "_n_hypo_params",
         "_x_table",
@@ -70,10 +71,13 @@ class LLHService:
         """number of hypotheses per batch"""
 
         # note: my example has one "observation" feature,
-        # yielding the -1 below. This should be made more general
-        self._n_hypo_params = n_features - 1
+        # This should be made more general
+        self._n_obs_features = 1
+        self._n_hypo_params = n_features - self._n_obs_features
 
-        self._x_table = np.zeros((self._n_table_rows, 1), dtype=np.float32)
+        self._x_table = np.zeros(
+            (self._n_table_rows, self._n_obs_features), dtype=np.float32
+        )
         self._theta_table = np.zeros(
             (self._n_hypos, self._n_hypo_params), dtype=np.float32
         )
@@ -155,16 +159,15 @@ class LLHService:
         x, theta = msg_parts[-2:]
 
         x = np.frombuffer(x, np.float32)
+        n_obs = int(len(x) / self._n_obs_features)
+        x = x.reshape(n_obs, self._n_obs_features)
 
         thetas = np.frombuffer(theta, np.float32)
+        batch_size = int(len(thetas) / self._n_hypo_params)
+        thetas = thetas.reshape(batch_size, self._n_hypo_params)
 
         next_ind = self._next_table_ind
-
-        n_obs = len(x)
         hypo_ind = self._next_hypo_ind
-        batch_size = int(len(thetas) / self._n_hypo_params)
-
-        thetas = thetas.reshape(batch_size, self._n_hypo_params)
 
         n_rows = n_obs * batch_size
 
@@ -184,7 +187,9 @@ class LLHService:
             stop_hypo_ind = batch_size
 
         # fill table with observations and hypothesis parameters
-        self._x_table[next_ind:stop_ind] = np.tile(x, batch_size)[:, np.newaxis]
+        self._x_table[next_ind:stop_ind] = np.tile(
+            x, (batch_size, self._n_obs_features)
+        )
         self._theta_table[hypo_ind:stop_hypo_ind] = thetas
 
         # update stop indices

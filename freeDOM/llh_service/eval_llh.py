@@ -7,8 +7,8 @@ import tensorflow as tf
 
 @tf.function
 def eval_llh(x, theta, stop_inds, model):
-    #     print("tracing eval_llh")
-    #     tf.print("executing eval_llh")
+    # print("tracing eval_llh")
+    # tf.print("executing eval_llh")
 
     # calculate n observations per LLH
     # ensure that sum(n_obs) == len(x) by
