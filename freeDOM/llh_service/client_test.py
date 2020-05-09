@@ -13,6 +13,9 @@ import os
 import sys
 import time
 
+import matplotlib as mpl
+
+mpl.use("agg")
 from matplotlib import pyplot as plt
 import numpy as np
 
@@ -86,11 +89,7 @@ def main():
         f" ({delta/n_eval*1e6:.3f} us per eval)"
     )
 
-    try:
-        os.mkdir("plots")
-    except OSError as err:
-        if err.errno != 17:
-            raise
+    os.makedirs("plots", exist_ok=True)
     plt.plot(mus.flatten(), llhs)
     plt.savefig(f"plots/test_{mu}_{n_obs}.png", bbox="tight")
 
