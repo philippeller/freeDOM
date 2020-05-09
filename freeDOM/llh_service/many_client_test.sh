@@ -1,17 +1,17 @@
 #!/bin/bash
 
-N_PARALLEL=$1
+N_CLIENTS=$1
 
-N_X=22
-SVC_LOG=logs/llh_service_log.txt
+N_X=150
+SVC_LOG=logs/llh_service.log
 
-echo "# N_PARALLEL=${N_PARALLEL}"
+echo "# N_CLIENTS=${N_CLIENTS}"
 
 mkdir -p logs
 rm -f "$SVC_LOG"
 
 echo "# Starting llh_service..."
-python llh_service.py >& $SVC_LOG &
+python ./llh_service.py > $SVC_LOG 2>&1 &
 
 printf "# Waiting until llh_service is initialized."
 while ((1))
@@ -33,14 +33,14 @@ do
     for sig in {1..20}
     do
         echo "# Launching client #${i} to test mu=${mu}, sig=${sig}..."
-        logfile=logs/"serial_test_${i}_mu=${mu}_n_x=${N_X}_sig=${sig}.log"
-        python serial_opt_test.py $mu $sig $N_X 2>&1 > "$logfile" &
+        logfile=logs/"opt_test_${i}_mu=${mu}_n_x=${N_X}_sig=${sig}.log"
+        python ./opt_test.py $mu $sig $N_X --serial > "$logfile" 2>&1 &
         pids+=($!)
         logfiles[$i]="$logfile"
         (( i++ ))
-        (( i >= N_PARALLEL )) && break
+        (( i >= N_CLIENTS )) && break
     done
-    (( i >= N_PARALLEL )) && break
+    (( i >= N_CLIENTS )) && break
 done
 
 echo "# Waiting for all clients to finish..."
@@ -65,7 +65,7 @@ printf "# Average time per eval: %.0f us\n" $( echo "($T_MS * 1000) / ($N_EVALS 
 end=`date +%s`
 delta=`expr $end - $start`
 echo "# Total execution time was ${delta} seconds"
-echo "# Inspect plots to make sure output is reasonable."
+#echo "# Inspect plots to make sure output is reasonable."
 
 echo "# Clients have finished. Telling llh service to stop."
-python kill_service.py
+python ./kill_service.py
