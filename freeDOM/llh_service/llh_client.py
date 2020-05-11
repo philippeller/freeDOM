@@ -12,6 +12,8 @@ import numpy as np
 import zmq
 import uuid
 
+import llh_cython
+
 
 class LLHClient:
 
@@ -30,6 +32,7 @@ class LLHClient:
     def max_hypos_per_batch(self):
         return self._max_hypos_per_batch
 
+    # @profile
     def request_eval(self, x, mu, sig, req_id=""):
         """ request a single llh eval
             x must be a numpy array with dtype float32
@@ -51,7 +54,8 @@ class LLHClient:
         theta_buff[0] = mu
         theta_buff[1] = sig
 
-        self._sock.send_multipart([req_id_bytes, x, theta_buff])
+        # self._sock.send_multipart([req_id_bytes, x, theta_buff])
+        llh_cython.dispatch_request(self._sock, req_id_bytes, x, theta_buff)
 
     def request_batch_eval(self, x, mus, sigs, req_id=""):
         """ requests batch eval of llh(x|mu, sig) for all mus and sigs
@@ -79,7 +83,8 @@ class LLHClient:
         theta_buff = np.empty(2 * len(mus), np.float32)
         theta_buff[:] = np.vstack((mus, sigs)).T.flatten()
 
-        self._sock.send_multipart([req_id_bytes, x, theta_buff])
+        # self._sock.send_multipart([req_id_bytes, x, theta_buff])
+        llh_cython.dispatch_request(self._sock, req_id_bytes, x, theta_buff)
 
     def recv(self, timeout=1000):
         if self._sock.poll(timeout, zmq.POLLIN) != 0:

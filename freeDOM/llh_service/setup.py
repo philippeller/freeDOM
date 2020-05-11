@@ -7,9 +7,10 @@ import zmq
 
 extensions = [
     Extension(
-        "dispatch_reps", ["dispatch_replies.pyx"], 
+        "llh_cython",
+        ["llh_cython.pyx"],
         include_dirs=zmq.get_includes() + [numpy.get_include()],
-        extra_link_args=["-lzmq"]
+        extra_link_args=["-lzmq"],
     )
 ]
-setup(name="dispatch", ext_modules=cythonize(extensions))
+setup(name="llh_cython", ext_modules=cythonize(extensions))
