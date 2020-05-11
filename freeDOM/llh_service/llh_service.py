@@ -14,16 +14,35 @@ import time
 import sys
 
 import numpy as np
+import numba
 import tensorflow as tf
 import zmq
 
 from freeDOM.transformations import chargenet_trafo, hitnet_trafo
+import llh_cython
 import eval_llh
 
 
 def wstdout(s):
-    sys.stdout.write(s)
-    sys.stdout.flush()
+    # sys.stdout.write(s)
+    # sys.stdout.flush()
+    pass
+
+
+# fake eval_llh for development
+zero_floats = np.full(10000, 10, np.float32)
+
+
+class fake_llh:
+    def __init__(self):
+        pass
+
+    def numpy(self):
+        return zero_floats
+
+
+def fake_eval_llh(*args, **kwargs):
+    return fake_llh()
 
 
 class LLHService:
@@ -65,6 +84,7 @@ class LLHService:
         use_freeDOM_model=False,
         hitnet_file=None,
         chargenet_file=None,
+        bypass_tensorflow=False,
     ):
         self._work_reqs = []
 
@@ -106,6 +126,11 @@ class LLHService:
 
             self._eval_llh = eval_llh.freedom_nllh
 
+
+        if bypass_tensorflow:
+            self._eval_llh = fake_eval_llh
+
+
         # trace-compile the llh function in advance
         self._eval_llh(
             tf.constant(self._x_table),
@@ -128,6 +153,27 @@ class LLHService:
             req_addr=req_addr, ctrl_addr=ctrl_addr, send_hwm=send_hwm, recv_hwm=recv_hwm
         )
 
+        # trace-compile the llh function in advance
+        self._eval_llh(
+            tf.constant(self._x_table),
+            tf.constant(self._theta_table),
+            tf.constant(self._stop_inds),
+            self._model,
+        )
+
+        # # jit compile self._fill_tables
+        # self._fill_tables(
+        #     self._x_table,
+        #     self._theta_table,
+        #     self._stop_inds,
+        #     np.zeros(self._n_obs_features, np.float32),
+        #     np.zeros(self._n_hypo_params, np.float32),
+        #     0,
+        #     0,
+        # )
+        # self._flush()
+
+    # @profile
     def start_work_loop(self):
         wstdout("starting work loop\n")
         flush_period = self._flush_period
@@ -210,6 +256,18 @@ class LLHService:
             stop_ind = n_rows
             stop_hypo_ind = batch_size
 
+        self._record_req(
+            x, thetas, next_ind, hypo_ind, stop_ind, stop_hypo_ind, header_frames
+        )
+        # self._numba_record_req(x, thetas, next_ind, hypo_ind, header_frames)
+
+    # @profile
+    def _record_req(
+        self, x, thetas, next_ind, hypo_ind, stop_ind, stop_hypo_ind, header_frames
+    ):
+        batch_size = len(thetas)
+        n_obs = len(x)
+
         # fill table with observations and hypothesis parameters
         self._x_table[next_ind:stop_ind] = np.tile(x, (batch_size, 1))
         self._theta_table[hypo_ind:stop_hypo_ind] = thetas
@@ -229,11 +287,57 @@ class LLHService:
         self._next_table_ind = stop_ind
         self._next_hypo_ind = stop_hypo_ind
 
+    # @profile
+    def _numba_record_req(self, x, thetas, next_ind, hypo_ind, header_frames):
+        self._fill_tables(
+            self._x_table,
+            self._theta_table,
+            self._stop_inds,
+            x,
+            thetas,
+            next_ind,
+            hypo_ind,
+        )
+
+        stop_hypo_ind = hypo_ind + len(thetas)
+
+        # record work request information
+        work_item_dict = dict(
+            header_frames=header_frames, start_ind=hypo_ind, stop_ind=stop_hypo_ind,
+        )
+        self._work_reqs.append(work_item_dict)
+        self._next_table_ind = next_ind + len(x) * len(thetas)
+        self._next_hypo_ind = stop_hypo_ind
+
+    @staticmethod
+    @numba.njit
+    def _fill_tables(x_table, theta_table, stop_inds, x, thetas, next_ind, hypo_ind):
+
+        batch_size = len(thetas)
+        n_obs = len(x)
+
+        # fill table with observations and hypothesis parameters
+        for i in range(batch_size):
+            start = next_ind + i * n_obs
+            stop = start + n_obs
+            x_table[start:stop] = x
+
+        theta_table[hypo_ind : hypo_ind + batch_size] = thetas
+
+        # update stop indices
+        next_stop = next_ind + n_obs
+        stop_inds[hypo_ind : hypo_ind + batch_size] = np.arange(
+            next_stop, next_stop + n_obs * batch_size, n_obs
+        )
+
+    # @profile
     def _process_all_reqs(self):
         # pylint: disable=no-member
         while True:
             try:
-                self._process_message(self._req_sock.recv_multipart(zmq.NOBLOCK))
+                # frames = self._req_sock.recv_multipart(zmq.DONTWAIT)
+                frames = llh_cython.receive_req(self._req_sock)
+                self._process_message(frames)
             except zmq.error.Again:
                 # no more messages
                 return
@@ -247,7 +351,7 @@ class LLHService:
         """
         # pylint: disable=no-member
         try:
-            return self._ctrl_sock.recv_string(zmq.NOBLOCK)
+            return self._ctrl_sock.recv_string(zmq.DONTWAIT)
         except zmq.error.Again:
             # this should never happen, we are receiving only after polling.
             # print a message and raise again
@@ -269,14 +373,20 @@ class LLHService:
             llh_sums = self._eval_llh(x_table, theta_table, stop_inds, self._model)
             llhs = llh_sums.numpy()
 
-            for work_req in self._work_reqs:
-                llh_slice = llhs[work_req["start_ind"] : work_req["stop_ind"]]
-                self._req_sock.send_multipart(work_req["header_frames"] + [llh_slice])
+            # self._dispatch_replies(llhs)
+            llh_cython.dispatch_replies(self._req_sock, self._work_reqs, llhs)
 
             self._work_reqs.clear()
             self._next_table_ind = 0
             self._next_hypo_ind = 0
             self._stop_inds[:] = self._n_table_rows
+
+    # @profile
+    def _dispatch_replies(self, llhs):
+        for work_req in self._work_reqs:
+            llh_slice = llhs[work_req["start_ind"] : work_req["stop_ind"]]
+            frames = work_req["header_frames"] + [llh_slice]
+            self._req_sock.send_multipart(frames)
 
 
 def main():
@@ -284,6 +394,8 @@ def main():
         params = json.load(f)
 
     with LLHService(**params) as service:
+        sys.stdout.write("starting work loop:\n")
+        sys.stdout.flush()
         service.start_work_loop()
 
 
