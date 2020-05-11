@@ -40,7 +40,6 @@ class LLHService:
         "_next_table_ind",
         "_next_hypo_ind",
         "_model",
-        "_eval_llh",
         "_flush_period",
         "_poll_timeout",
         "_ctxt",
@@ -82,7 +81,9 @@ class LLHService:
         self._theta_table = np.zeros(
             (self._n_hypos, self._n_hypo_params), dtype=np.float32
         )
-        self._stop_inds = np.full(self._n_hypos, self._n_table_rows, np.int32)
+        self._stop_inds = np.full(
+            shape=(self._n_hypos,), fill_value=self._n_table_rows, dtype=np.int32
+        )
         self._next_table_ind = 0
         self._next_hypo_ind = 0
 
@@ -260,10 +261,10 @@ class LLHService:
                 llh_slice = llhs[work_req["start_ind"] : work_req["stop_ind"]]
                 self._req_sock.send_multipart(work_req["header_frames"] + [llh_slice])
 
-        self._work_reqs.clear()
-        self._next_table_ind = 0
-        self._next_hypo_ind = 0
-        self._stop_inds[:] = self._n_table_rows
+            self._work_reqs.clear()
+            self._next_table_ind = 0
+            self._next_hypo_ind = 0
+            self._stop_inds[:] = self._n_table_rows
 
 
 def main():
