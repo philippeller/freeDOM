@@ -13,9 +13,8 @@ def eval_llh(x, theta, stop_inds, model):
     # calculate n observations per LLH
     # ensure that sum(n_obs) == len(x) by
     # appending len(x) to the end of stop_inds
-    stop_inds = tf.concat([stop_inds, [len(x)]], axis=0)
-    start_inds = tf.concat([[0], stop_inds[:-1]], axis=0)
-    n_obs = stop_inds - start_inds
+    all_inds = tf.concat([[0], stop_inds, [len(x)]], axis=0)
+    n_obs = all_inds[1:] - all_inds[:-1]
 
     # handle zero-padding of dense_theta
     theta = tf.concat([theta, tf.zeros((1, theta.shape[1]), tf.float32)], axis=0)
