@@ -1,6 +1,6 @@
 {
-    "req_addr": "ipc:///tmp/req1",
-    "ctrl_addr": "ipc:///tmp/ctrl1",
+    "req_addr": "ipc:///tmp/req1atf",
+    "ctrl_addr": "ipc:///tmp/ctrl1atf",
     "poll_timeout": 1,
     "flush_period": 1,
     "model_file": "gaussian_nn_2million.h5",
@@ -8,11 +8,7 @@
     "n_obs_features": 5,
     "batch_size" : {
       "n_hypos": 256,
-      "n_observations": 10000 
-    },
-    "transform_params": {
-      "feature_means": [ 1.0894459e-02, -9.6042268e-04,  1.0048270e+01],
-      "feature_stds": [12.909376,   5.7661057,  5.735433 ]
+      "n_observations": 6000 
     },
     "send_hwm": 100000,
     "recv_hwm": 100000,
