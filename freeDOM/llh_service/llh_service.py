@@ -143,7 +143,7 @@ class LLHService:
 
     def _init_sockets(self, req_addr, ctrl_addr, send_hwm, recv_hwm):
         # pylint: disable=no-member
-        self._ctxt = zmq.Context.instance()
+        self._ctxt = zmq.Context()
 
         req_sock = self._ctxt.socket(zmq.ROUTER)
         req_sock.setsockopt(zmq.SNDHWM, send_hwm)
