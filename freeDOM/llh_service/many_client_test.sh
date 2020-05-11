@@ -2,16 +2,23 @@
 
 N_CLIENTS=$1
 
+
 N_X=150
 SVC_LOG=logs/llh_service.log
+
 
 echo "# N_CLIENTS=${N_CLIENTS}"
 
 mkdir -p logs
 rm -f "$SVC_LOG"
 
+
 echo "# Starting llh_service..."
 python ./llh_service.py > $SVC_LOG 2>&1 &
+llh_svc_pid=$!
+
+trap "kill $llh_svc_pid" 0
+
 
 printf "# Waiting until llh_service is initialized."
 while ((1))
@@ -21,6 +28,7 @@ do
     sleep 0.1
 done
 printf "\n"
+
 
 start=`date +%s`
 
@@ -43,11 +51,13 @@ do
     (( i >= N_CLIENTS )) && break
 done
 
+
 echo "# Waiting for all clients to finish..."
 for pid in ${pids[*]}
 do
     wait $pid
 done
+
 
 N_EVALS=0
 T_MS=0
@@ -66,6 +76,7 @@ end=`date +%s`
 delta=`expr $end - $start`
 echo "# Total execution time was ${delta} seconds"
 #echo "# Inspect plots to make sure output is reasonable."
+
 
 echo "# Clients have finished. Telling llh service to stop."
 python ./kill_service.py

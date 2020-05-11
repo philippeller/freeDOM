@@ -9,6 +9,10 @@ rm -f "$SVC_LOG"
 
 echo "# Starting llh_service..."
 python llh_service.py >& $SVC_LOG &
+llh_svc_pid=$!
+
+trap "kill $llh_svc_pid" 0
+
 
 printf "# Waiting until llh_service is initialized."
 while ((1))
@@ -18,6 +22,7 @@ do
     sleep 0.1
 done
 printf "\n"
+
 
 echo "# Starting clients..."
 pids=()
@@ -30,13 +35,14 @@ do
     (( i++ ))
 done
 
+
 echo "# Waiting for all clients to finish..."
 for pid in ${pids[*]}
 do
     wait $pid
 done
 
-echo "# Inspect plots to make sure output is reasonable."
 
+echo "# Inspect plots to make sure output is reasonable."
 echo "# Clients have finished. Telling llh service to stop."
 python kill_service.py
