@@ -4,15 +4,19 @@
     "poll_timeout": 1,
     "flush_period": 1,
     "model_file": "gaussian_nn_2million.h5",
-    "n_features": 3, 
+    "n_hypo_params": 8,
+    "n_obs_features": 5,
     "batch_size" : {
-      "n_hypos": 50,
-      "n_observations": 20000 
+      "n_hypos": 256,
+      "n_observations": 10000 
     },
     "transform_params": {
       "feature_means": [ 1.0894459e-02, -9.6042268e-04,  1.0048270e+01],
       "feature_stds": [12.909376,   5.7661057,  5.735433 ]
     },
     "send_hwm": 100000,
-    "recv_hwm": 100000
+    "recv_hwm": 100000,
+    "use_freeDOM_model": true,
+    "hitnet_file": "../models/HitNet_08_May_2020-16h02/epoch_3675_model.hdf5",
+    "chargenet_file": "../models/ChargeNet_08_May_2020-15h59/epoch_600_model.hdf5"
 }

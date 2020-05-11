@@ -17,6 +17,7 @@ import numpy as np
 import tensorflow as tf
 import zmq
 
+from freeDOM.transformations import chargenet_trafo, hitnet_trafo
 import eval_llh
 
 
@@ -55,14 +56,16 @@ class LLHService:
         poll_timeout,
         flush_period,
         model_file,
-        n_features,
+        n_hypo_params,
+        n_obs_features,
         batch_size,
         transform_params,
         send_hwm,
         recv_hwm,
+        use_freeDOM_model=False,
+        hitnet_file=None,
+        chargenet_file=None,
     ):
-        self._eval_llh = eval_llh.eval_llh
-
         self._work_reqs = []
 
         self._n_table_rows = batch_size["n_observations"]
@@ -70,10 +73,8 @@ class LLHService:
         self._n_hypos = batch_size["n_hypos"]
         """number of hypotheses per batch"""
 
-        # note: my example has one "observation" feature,
-        # This should be made more general
-        self._n_obs_features = 1
-        self._n_hypo_params = n_features - self._n_obs_features
+        self._n_obs_features = n_obs_features
+        self._n_hypo_params = n_hypo_params
 
         self._x_table = np.zeros(
             (self._n_table_rows, self._n_obs_features), dtype=np.float32
@@ -87,10 +88,23 @@ class LLHService:
         self._next_table_ind = 0
         self._next_hypo_ind = 0
 
-        classifier = tf.keras.models.load_model(model_file)
+        if not use_freeDOM_model:
+            classifier = tf.keras.models.load_model(model_file)
 
-        # build a model that includes the normalization
-        self._model = eval_llh.build_norm_model(classifier, **transform_params)
+            # build a model that includes the normalization
+            self._model = eval_llh.build_norm_model(classifier, **transform_params)
+
+            self._eval_llh = eval_llh.eval_llh
+        else:
+            hitnet = tf.keras.models.load_model(
+                hitnet_file, custom_objects={"hitnet_trafo": hitnet_trafo}
+            )
+            chargenet = tf.keras.models.load_model(
+                chargenet_file, custom_objects={"chargenet_trafo": chargenet_trafo}
+            )
+            self._model = (hitnet, chargenet)
+
+            self._eval_llh = eval_llh.freedom_nllh
 
         # trace-compile the llh function in advance
         self._eval_llh(
@@ -197,9 +211,7 @@ class LLHService:
             stop_hypo_ind = batch_size
 
         # fill table with observations and hypothesis parameters
-        self._x_table[next_ind:stop_ind] = np.tile(
-            x, (batch_size, self._n_obs_features)
-        )
+        self._x_table[next_ind:stop_ind] = np.tile(x, (batch_size, 1))
         self._theta_table[hypo_ind:stop_hypo_ind] = thetas
 
         # update stop indices
