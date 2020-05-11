@@ -126,10 +126,8 @@ class LLHService:
 
             self._eval_llh = eval_llh.freedom_nllh
 
-
         if bypass_tensorflow:
             self._eval_llh = fake_eval_llh
-
 
         # trace-compile the llh function in advance
         self._eval_llh(
