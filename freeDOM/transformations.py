@@ -3,7 +3,7 @@ import tensorflow as tf
 from scipy import constants
 
 
-class trafo_indep(tf.keras.layers.Layer):
+class hitnet_trafo(tf.keras.layers.Layer):
     '''Class to transfor inputs for Hit Net
     Independent angles
     '''
@@ -104,7 +104,7 @@ class trafo_indep(tf.keras.layers.Layer):
         return out
     
     
-class trafo_q(tf.keras.layers.Layer):
+class chargenet_trafo(tf.keras.layers.Layer):
     '''Class to transfor inputs for Charget Net
     '''
     
