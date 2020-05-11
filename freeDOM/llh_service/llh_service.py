@@ -20,7 +20,7 @@ import zmq
 
 import llh_cython
 
-# import eval_llh
+import eval_llh
 
 
 def wstdout(s):
@@ -41,7 +41,7 @@ class fake_llh:
         return zero_floats
 
 
-def eval_llh(*args, **kwargs):
+def fake_eval_llh(*args, **kwargs):
     return fake_llh()
 
 
@@ -60,9 +60,9 @@ class LLHService:
         "_next_table_ind",
         "_next_hypo_ind",
         "_model",
-        "_eval_llh",
         "_flush_period",
         "_poll_timeout",
+        "_ctxt",
         "_req_sock",
         "_ctrl_sock",
         "_last_flush",
@@ -80,9 +80,12 @@ class LLHService:
         transform_params,
         send_hwm,
         recv_hwm,
+        bypass_tensorflow=False,
     ):
-        # self._eval_llh = eval_llh.eval_llh
-        self._eval_llh = eval_llh
+        if bypass_tensorflow:
+            self._eval_llh = fake_eval_llh
+        else:
+            self._eval_llh = eval_llh.eval_llh
 
         self._work_reqs = []
 
@@ -102,7 +105,9 @@ class LLHService:
         self._theta_table = np.zeros(
             (self._n_hypos, self._n_hypo_params), dtype=np.float32
         )
-        self._stop_inds = np.full(self._n_hypos, self._n_table_rows, np.int32)
+        self._stop_inds = np.full(
+            shape=(self._n_hypos,), fill_value=self._n_table_rows, dtype=np.int32
+        )
         self._next_table_ind = 0
         self._next_hypo_ind = 0
 
@@ -117,6 +122,7 @@ class LLHService:
 
         self._poll_timeout = poll_timeout
 
+        self._ctxt = None
         self._req_sock = None
         self._ctrl_sock = None
         self._last_flush = 0
@@ -133,20 +139,21 @@ class LLHService:
             self._model,
         )
 
-        # jit compile self._fill_tables
-        self._fill_tables(
-            self._x_table,
-            self._theta_table,
-            self._stop_inds,
-            np.zeros(self._n_obs_features, np.float32),
-            np.zeros(self._n_hypo_params, np.float32),
-            0,
-            0,
-        )
-        self._flush()
+        # # jit compile self._fill_tables
+        # self._fill_tables(
+        #     self._x_table,
+        #     self._theta_table,
+        #     self._stop_inds,
+        #     np.zeros(self._n_obs_features, np.float32),
+        #     np.zeros(self._n_hypo_params, np.float32),
+        #     0,
+        #     0,
+        # )
+        # self._flush()
 
     # @profile
     def start_work_loop(self):
+        wstdout("starting work loop\n")
         flush_period = self._flush_period
         self._last_flush = time.time()
 
@@ -159,7 +166,7 @@ class LLHService:
         while True:
             events = poller.poll(poll_timeout)
 
-            for sock, evt in events:
+            for sock, _ in events:
                 if sock is self._req_sock:
                     self._process_all_reqs()
                 elif sock is self._ctrl_sock:
@@ -173,20 +180,27 @@ class LLHService:
                 self._flush()
 
     def _init_sockets(self, req_addr, ctrl_addr, send_hwm, recv_hwm):
-        ctxt = zmq.Context.instance()
+        # pylint: disable=no-member
+        self._ctxt = zmq.Context()
 
-        req_sock = ctxt.socket(zmq.ROUTER)
+        req_sock = self._ctxt.socket(zmq.ROUTER)
         req_sock.setsockopt(zmq.SNDHWM, send_hwm)
         req_sock.setsockopt(zmq.RCVHWM, recv_hwm)
         req_sock.bind(req_addr)
 
-        ctrl_sock = ctxt.socket(zmq.PULL)
+        ctrl_sock = self._ctxt.socket(zmq.PULL)
         ctrl_sock.bind(ctrl_addr)
 
         self._req_sock = req_sock
         self._ctrl_sock = ctrl_sock
 
-    # @profile
+    def __enter__(self):
+        return self
+
+    def __exit__(self, type, value, traceback):
+        print("cleaning up")
+        self._ctxt.destroy()
+
     def _process_message(self, msg_parts):
         wstdout(".")
         header_frames = msg_parts[:-2]
@@ -298,6 +312,7 @@ class LLHService:
 
     # @profile
     def _process_all_reqs(self):
+        # pylint: disable=no-member
         while True:
             try:
                 # frames = self._req_sock.recv_multipart(zmq.DONTWAIT)
@@ -314,6 +329,7 @@ class LLHService:
 
         Could become more complicated later
         """
+        # pylint: disable=no-member
         try:
             return self._ctrl_sock.recv_string(zmq.DONTWAIT)
         except zmq.error.Again:
@@ -325,7 +341,6 @@ class LLHService:
             )
             raise
 
-    # @profile
     def _flush(self):
         self._last_flush = time.time()
         wstdout("F")
@@ -358,12 +373,10 @@ def main():
     with open("service_params.json") as f:
         params = json.load(f)
 
-    service = LLHService(**params)
-
-    # print("starting work loop:")
-    sys.stdout.write("starting work loop:\n")
-    sys.stdout.flush()
-    service.start_work_loop()
+    with LLHService(**params) as service:
+        sys.stdout.write("starting work loop:\n")
+        sys.stdout.flush()
+        service.start_work_loop()
 
 
 if __name__ == "__main__":

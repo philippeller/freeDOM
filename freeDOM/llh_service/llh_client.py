@@ -8,9 +8,10 @@ from __future__ import absolute_import, division, print_function
 
 __author__ = "Aaron Fienberg"
 
+import uuid
+
 import numpy as np
 import zmq
-import uuid
 
 import llh_cython
 
@@ -34,8 +35,16 @@ class LLHClient:
 
     # @profile
     def request_eval(self, x, mu, sig, req_id=""):
-        """ request a single llh eval
-            x must be a numpy array with dtype float32
+        """Request a single llh eval
+
+        Parameters
+        ----------
+        x : shape (n_x,) numpy.ndarray of dtype float32
+        mu : float32
+        sig : float32
+        req_id : optional
+            Converted to str, and returned as such
+
         """
 
         if len(x) > self._max_obs_per_batch:
@@ -45,10 +54,7 @@ class LLHClient:
             )
 
         # send a req_id string for development and debugging
-        if not isinstance(req_id, str):
-            req_id = str(req_id)
-
-        req_id_bytes = req_id.encode()
+        req_id_bytes = str(req_id).encode()
 
         theta_buff = np.empty(2, np.float32)
         theta_buff[0] = mu
@@ -58,9 +64,16 @@ class LLHClient:
         llh_cython.dispatch_request(self._sock, req_id_bytes, x, theta_buff)
 
     def request_batch_eval(self, x, mus, sigs, req_id=""):
-        """ requests batch eval of llh(x|mu, sig) for all mus and sigs
-            mus and sigs should be the same length
-            x must be a numpy array with dtype float32
+        """Request batch eval of llh(x|mu, sig) for all mus and sigs
+
+        Parameters
+        ----------
+        x : shape (n_x,) numpy.ndarray of dtype float32
+        mus : shape (n_hypos,) numpy.ndarray of dtype float32
+        sigs : shape (n_hypos,) numpy.ndarray of dtype float32
+        req_id : optional
+            Converted to a string and returned as such
+
         """
 
         if len(x) * len(mus) > self._max_obs_per_batch:
@@ -75,13 +88,11 @@ class LLHClient:
                 f" (In this case {self._max_hypos_per_batch})"
             )
 
-        if not isinstance(req_id, str):
-            req_id = str(req_id)
-
-        req_id_bytes = req_id.encode()
+        req_id_bytes = str(req_id).encode()
 
         theta_buff = np.empty(2 * len(mus), np.float32)
-        theta_buff[:] = np.vstack((mus, sigs)).T.flatten()
+        theta_buff[::2] = mus
+        theta_buff[1::2] = sigs
 
         # self._sock.send_multipart([req_id_bytes, x, theta_buff])
         llh_cython.dispatch_request(self._sock, req_id_bytes, x, theta_buff)
@@ -89,8 +100,7 @@ class LLHClient:
     def recv(self, timeout=1000):
         if self._sock.poll(timeout, zmq.POLLIN) != 0:
             req_id, llh = self._sock.recv_multipart()
-
-            return {"req_id": req_id.decode(), "llh": np.frombuffer(llh, np.float32)}
+            return dict(req_id=req_id.decode(), llh=np.frombuffer(llh, np.float32))
         return None
 
     def eval_llh(self, x, mu, sig, timeout=1000):
@@ -115,6 +125,7 @@ class LLHClient:
         return reply["llh"][0]
 
     def _init_socket(self, req_addr):
+        # pylint: disable=no-member
         ctxt = zmq.Context.instance()
         sock = ctxt.socket(zmq.DEALER)
         sock.connect(req_addr)
