@@ -13,8 +13,6 @@ import uuid
 import numpy as np
 import zmq
 
-import llh_cython
-
 
 class LLHClient:
 
@@ -33,15 +31,13 @@ class LLHClient:
     def max_hypos_per_batch(self):
         return self._max_hypos_per_batch
 
-    # @profile
-    def request_eval(self, x, mu, sig, req_id=""):
+    def request_eval(self, x, theta, req_id=""):
         """Request a single llh eval
 
         Parameters
         ----------
-        x : shape (n_x,) numpy.ndarray of dtype float32
-        mu : float32
-        sig : float32
+        x : observations: numpy.ndarray of dtype float32
+        theta: hypothesis params: numpy.ndarray of dtype float32
         req_id : optional
             Converted to str, and returned as such
 
@@ -56,33 +52,26 @@ class LLHClient:
         # send a req_id string for development and debugging
         req_id_bytes = str(req_id).encode()
 
-        theta_buff = np.empty(2, np.float32)
-        theta_buff[0] = mu
-        theta_buff[1] = sig
+        self._sock.send_multipart([req_id_bytes, x, theta])
 
-        # self._sock.send_multipart([req_id_bytes, x, theta_buff])
-        llh_cython.dispatch_request(self._sock, req_id_bytes, x, theta_buff)
-
-    def request_batch_eval(self, x, mus, sigs, req_id=""):
+    def request_batch_eval(self, x, thetas, req_id=""):
         """Request batch eval of llh(x|mu, sig) for all mus and sigs
 
         Parameters
         ----------
-        x : shape (n_x,) numpy.ndarray of dtype float32
-        mus : shape (n_hypos,) numpy.ndarray of dtype float32
-        sigs : shape (n_hypos,) numpy.ndarray of dtype float32
+        x : observations numpy.ndarray of dtype float32
+        thetas: hypothesis parameters to evaluate, numpy.ndarray of dtype float32
         req_id : optional
             Converted to a string and returned as such
-
         """
 
-        if len(x) * len(mus) > self._max_obs_per_batch:
+        if len(x) * len(thetas) > self._max_obs_per_batch:
             raise ValueError(
                 "len(x)*n_hypos must be <= the maximum batch size!"
                 f" (In this case {self._max_obs_per_batch})"
             )
 
-        if len(mus) > self._max_hypos_per_batch:
+        if len(thetas) > self._max_hypos_per_batch:
             raise ValueError(
                 "len(mus) must be <= the maximum hypothesis batch size!"
                 f" (In this case {self._max_hypos_per_batch})"
@@ -90,12 +79,7 @@ class LLHClient:
 
         req_id_bytes = str(req_id).encode()
 
-        theta_buff = np.empty(2 * len(mus), np.float32)
-        theta_buff[::2] = mus
-        theta_buff[1::2] = sigs
-
-        # self._sock.send_multipart([req_id_bytes, x, theta_buff])
-        llh_cython.dispatch_request(self._sock, req_id_bytes, x, theta_buff)
+        self._sock.send_multipart([req_id_bytes, x, thetas])
 
     def recv(self, timeout=1000):
         if self._sock.poll(timeout, zmq.POLLIN) != 0:
@@ -103,17 +87,24 @@ class LLHClient:
             return dict(req_id=req_id.decode(), llh=np.frombuffer(llh, np.float32))
         return None
 
-    def eval_llh(self, x, mu, sig, timeout=1000):
+    def eval_llh(self, x, theta, timeout=1000):
         """ synchronous llh evaluation
             blocks until llh is ready
             raises RuntimeError on timeout
 
             Should not be used while asynchronous requests are in progress
+            
+            Parameters
+            ----------
+            x : observations: numpy.ndarray of dtype float32
+            theta: hypothesis params: numpy.ndarray of dtype float32
+            req_id : optional
+            Converted to str, and returned as such
         """
 
         req_id = uuid.uuid4().hex
 
-        self.request_eval(x, mu, sig, req_id=req_id)
+        self.request_eval(x, theta, req_id=req_id)
 
         reply = self.recv(timeout)
         if reply is None:
