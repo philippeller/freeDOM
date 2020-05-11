@@ -46,6 +46,9 @@ def opt_test(client, mean, std, n_obs, serial, gridsize=GRIDSIZE, plot=True):
         Plot the results
 
     """
+    # NOTE: Finding indexing bugs can be easier if these are different values
+    gridsize_means = gridsize
+    gridsize_stds = gridsize
 
     # generate the random samples
     rand = np.random.default_rng(seed=0)
@@ -58,11 +61,11 @@ def opt_test(client, mean, std, n_obs, serial, gridsize=GRIDSIZE, plot=True):
     err_mean = samp_std / math.sqrt(len(x))
 
     means = np.linspace(
-        samp_mean - 4.5 * err_mean, samp_mean + 4.5 * err_mean, gridsize
+        samp_mean - 4.5 * err_mean, samp_mean + 4.5 * err_mean, gridsize_means
     )
-    stds = np.linspace(samp_std * 0.85, samp_std * 1.15, gridsize)
+    stds = np.linspace(samp_std * 0.85, samp_std * 1.15, gridsize_stds)
 
-    llh_map = np.empty((len(stds), len(means)), dtype=np.float32)
+    llh_map = np.empty(shape=(gridsize_stds, gridsize_means), dtype=np.float32)
 
     start = 0
     if serial:
@@ -72,7 +75,7 @@ def opt_test(client, mean, std, n_obs, serial, gridsize=GRIDSIZE, plot=True):
             for j, mean_ in enumerate(means):
                 llh_map[i, j] = client.eval_llh(x, mean_, std_)
     else:
-        mg_stds, mg_means = np.meshgrid(stds, means)
+        mg_stds, mg_means = np.meshgrid(stds, means, indexing="ij")
         n_hypos = mg_means.size
 
         batch_size = client.max_hypos_per_batch
@@ -92,13 +95,13 @@ def opt_test(client, mean, std, n_obs, serial, gridsize=GRIDSIZE, plot=True):
         while num_replies < num_requests:
             reply = client.recv()
             if reply is not None:
-                start_idx = int(reply["req_id"])
+                start_idx = num_replies * batch_size
                 llh_map.flat[start_idx : start_idx + batch_size] = reply["llh"]
                 num_replies += 1
 
     delta = time.time() - start
 
-    n_eval = len(stds) * len(means)
+    n_eval = gridsize_stds * gridsize_means
 
     print(
         f"{n_eval} evals took {delta*1000:.3f} ms"
@@ -106,6 +109,7 @@ def opt_test(client, mean, std, n_obs, serial, gridsize=GRIDSIZE, plot=True):
     )
 
     if plot:
+        # pylint: disable=import-outside-toplevel
         import matplotlib as mpl
 
         mpl.use("agg")
