@@ -1,6 +1,6 @@
 {
-    "req_addr": "ipc:///tmp/req1atf",
-    "ctrl_addr": "ipc:///tmp/ctrl1atf",
+    "req_addr": "ipc:///tmp/req1",
+    "ctrl_addr": "ipc:///tmp/ctrl1",
     "poll_timeout": 1,
     "flush_period": 1,
     "model_file": "gaussian_nn_2million.h5",
