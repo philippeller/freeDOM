@@ -10,6 +10,7 @@ from __future__ import absolute_import, division, print_function
 __author__ = "Aaron Fienberg"
 
 import json
+import os
 import time
 import sys
 
@@ -18,15 +19,19 @@ import numba
 import tensorflow as tf
 import zmq
 
+FREEDOM_DIR = os.path.dirname(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+)
+if FREEDOM_DIR not in sys.path:
+    sys.path.append(FREEDOM_DIR)
 from freeDOM.transformations import chargenet_trafo, hitnet_trafo
 import llh_cython
 import eval_llh
 
 
 def wstdout(s):
-    # sys.stdout.write(s)
-    # sys.stdout.flush()
-    pass
+    sys.stdout.write(s)
+    sys.stdout.flush()
 
 
 # fake eval_llh for development
@@ -173,7 +178,6 @@ class LLHService:
 
     # @profile
     def start_work_loop(self):
-        wstdout("starting work loop\n")
         flush_period = self._flush_period
         self._last_flush = time.time()
 
@@ -206,6 +210,7 @@ class LLHService:
         req_sock = self._ctxt.socket(zmq.ROUTER)
         req_sock.setsockopt(zmq.SNDHWM, send_hwm)
         req_sock.setsockopt(zmq.RCVHWM, recv_hwm)
+        req_sock.setsockopt(zmq.ROUTER_MANDATORY, 1)
         req_sock.bind(req_addr)
 
         ctrl_sock = self._ctxt.socket(zmq.PULL)
@@ -222,7 +227,7 @@ class LLHService:
         self._ctxt.destroy()
 
     def _process_message(self, msg_parts):
-        wstdout(".")
+        # wstdout(".")
         header_frames = msg_parts[:-2]
         x, theta = msg_parts[-2:]
 
@@ -361,10 +366,10 @@ class LLHService:
 
     def _flush(self):
         self._last_flush = time.time()
-        wstdout("F")
+        # wstdout("F")
 
         if self._work_reqs:
-            wstdout("+")
+            # wstdout("+")
             x_table = tf.constant(self._x_table)
             theta_table = tf.constant(self._theta_table)
             stop_inds = tf.constant(self._stop_inds)
@@ -392,8 +397,7 @@ def main():
         params = json.load(f)
 
     with LLHService(**params) as service:
-        sys.stdout.write("starting work loop:\n")
-        sys.stdout.flush()
+        wstdout("starting work loop:\n")
         service.start_work_loop()
 
 
