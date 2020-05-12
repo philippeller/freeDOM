@@ -87,28 +87,44 @@ class LLHClient:
             return dict(req_id=req_id.decode(), llh=np.frombuffer(llh, np.float32))
         return None
 
-    def eval_llh(self, x, theta, timeout=1000):
-        """ synchronous llh evaluation
-            blocks until llh is ready
-            raises RuntimeError on timeout
+    def eval_llh(self, x, theta, timeout=1000, max_retries=100):
+        """Synchronous llh evaluation, blocking until llh is ready.
 
-            Should not be used while asynchronous requests are in progress
-            
-            Parameters
-            ----------
-            x : observations: numpy.ndarray of dtype float32
-            theta: hypothesis params: numpy.ndarray of dtype float32
-            req_id : optional
-            Converted to str, and returned as such
+        .. warning:: Do not use while asynchronous requests are in progress.
+
+        Parameters
+        ----------
+        x : numpy.ndarray of dtype float32
+            Observations
+        theta: numpy.ndarray of dtype float32
+            Hypothesis parameters
+        timeout : int, optional
+            Wait for a reply up to `timeout` milliseconds
+        max_retries : int >= 0, optional
+            Retry up to this many times if `timeout` occurs or an empty reply
+
+        Raises
+        ------
+        RuntimeError
+            On reaching timeout and/or empty response beyond max_retries
+
         """
 
         req_id = uuid.uuid4().hex
 
-        self.request_eval(x, theta, req_id=req_id)
-
-        reply = self.recv(timeout)
-        if reply is None:
-            raise RuntimeError("No reply from LLH service!")
+        failures = 0
+        while True:
+            self.request_eval(x, theta, req_id=req_id)
+            reply = self.recv(timeout)
+            if reply is None:
+                failures += 1
+                if failures > max_retries:
+                    raise RuntimeError(
+                        f"No reply from LLH service after {max_retries} retries."
+                    )
+                print("retrying")
+            else:
+                break
 
         if reply["req_id"] != req_id:
             raise RuntimeError("uuid mismatch!")
