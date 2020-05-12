@@ -25,7 +25,12 @@ def main():
     with open("service_params.json") as f:
         params = json.load(f)
 
-    client = LLHClient(req_addr=params["req_addr"], batch_size=params["batch_size"])
+    client = LLHClient(
+        req_addr=params["req_addr"],
+        batch_size=params["batch_size"],
+        n_hypo_params=params["n_hypo_params"],
+        n_obs_features=params["n_obs_features"],
+    )
 
     # test a single synchronous eval
 

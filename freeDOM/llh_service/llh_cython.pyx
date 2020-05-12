@@ -142,7 +142,7 @@ cpdef receive_req(Socket sock):
         libzmq.zmq_msg_init(&part)
         try:
             check_zmq_error(libzmq.zmq_msg_recv(&part, c_sock, libzmq.ZMQ_DONTWAIT))
-        except zmq.error.ZMQError:
+        except:
             libzmq.zmq_msg_close(&part)
             raise
             

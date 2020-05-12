@@ -18,12 +18,20 @@ import llh_cython
 
 class LLHClient:
 
-    slots = ["_max_hypos_per_batch", "_max_obs_per_batch", "_sock"]
+    slots = [
+        "_max_hypos_per_batch",
+        "_max_obs_per_batch",
+        "_n_hypo_params",
+        "_n_obs_features",
+        "_sock",
+    ]
 
-    def __init__(self, req_addr, batch_size):
+    def __init__(self, req_addr, batch_size, n_hypo_params, n_obs_features):
         self._init_socket(req_addr)
         self._max_hypos_per_batch = batch_size["n_hypos"]
         self._max_obs_per_batch = batch_size["n_observations"]
+        self._n_hypo_params = n_hypo_params
+        self._n_obs_features = n_obs_features
 
     @property
     def max_obs_per_batch(self):
@@ -45,9 +53,11 @@ class LLHClient:
 
         """
 
-        if len(x) > self._max_obs_per_batch:
+        n_obs = x.size / self._n_obs_features
+
+        if n_obs > self._max_obs_per_batch:
             raise ValueError(
-                "len(x) must be <= the maximum batch size!"
+                "x.size / n_obs_features must be <= the maximum batch size!"
                 f" (In this case {self._max_obs_per_batch})"
             )
 
@@ -68,15 +78,18 @@ class LLHClient:
             Converted to a string and returned as such
         """
 
-        if len(x) * len(thetas) > self._max_obs_per_batch:
+        n_obs = x.size / self._n_obs_features
+        n_hypos = thetas.size / self._n_hypo_params
+
+        if n_obs * n_hypos > self._max_obs_per_batch:
             raise ValueError(
-                "len(x)*n_hypos must be <= the maximum batch size!"
+                "n_obs*n_hypos must be <= the maximum batch size!"
                 f" (In this case {self._max_obs_per_batch})"
             )
 
-        if len(thetas) > self._max_hypos_per_batch:
+        if n_hypos > self._max_hypos_per_batch:
             raise ValueError(
-                "len(mus) must be <= the maximum hypothesis batch size!"
+                "n_hypos must be <= the maximum hypothesis batch size!"
                 f" (In this case {self._max_hypos_per_batch})"
             )
 
