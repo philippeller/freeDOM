@@ -13,6 +13,8 @@ import uuid
 import numpy as np
 import zmq
 
+import llh_cython
+
 
 class LLHClient:
 
@@ -52,7 +54,8 @@ class LLHClient:
         # send a req_id string for development and debugging
         req_id_bytes = str(req_id).encode()
 
-        self._sock.send_multipart([req_id_bytes, x, theta])
+        # self._sock.send_multipart([req_id_bytes, x, theta])
+        llh_cython.dispatch_request(self._sock, req_id_bytes, x, theta)
 
     def request_batch_eval(self, x, thetas, req_id=""):
         """Request batch eval of llh(x|mu, sig) for all mus and sigs
@@ -79,7 +82,8 @@ class LLHClient:
 
         req_id_bytes = str(req_id).encode()
 
-        self._sock.send_multipart([req_id_bytes, x, thetas])
+        # self._sock.send_multipart([req_id_bytes, x, thetas])
+        llh_cython.dispatch_request(self._sock, req_id_bytes, x, theta)
 
     def recv(self, timeout=None):
         if self._sock.poll(timeout, zmq.POLLIN) != 0:

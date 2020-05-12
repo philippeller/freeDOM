@@ -32,8 +32,8 @@ def main():
     with open("../test_data/test_event.pkl", "rb") as f:
         event = pickle.load(f)
 
-    hits = event["hits"]
-    theta = event["params"]
+    hits = event["hits"].flatten()
+    theta = event["params"].flatten()
 
     llhs = []
     start = time.time()
