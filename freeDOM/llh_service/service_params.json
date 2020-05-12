@@ -16,5 +16,5 @@
     "hitnet_file": "../models/HitNet_08_May_2020-16h02/epoch_3675_model.hdf5",
     "chargenet_file": "../models/ChargeNet_08_May_2020-15h59/epoch_600_model.hdf5",
     "router_mandatory": true,
-    "bypass_tensorflow": true
+    "bypass_tensorflow": false
 }
