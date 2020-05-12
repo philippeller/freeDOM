@@ -88,18 +88,26 @@ class LLHClient:
         return None
 
     def eval_llh(self, x, theta, timeout=1000):
-        """ synchronous llh evaluation
-            blocks until llh is ready
-            raises RuntimeError on timeout
+        """Synchronous llh evaluation, blocking until llh is ready.
 
-            Should not be used while asynchronous requests are in progress
-            
-            Parameters
-            ----------
-            x : observations: numpy.ndarray of dtype float32
-            theta: hypothesis params: numpy.ndarray of dtype float32
-            req_id : optional
-            Converted to str, and returned as such
+        .. warning:: Do not use while asynchronous requests are in progress.
+
+        Parameters
+        ----------
+        x : numpy.ndarray of dtype float32
+            Observations
+        theta: numpy.ndarray of dtype float32
+            Hypothesis parameters
+        timeout : int, optional
+            Wait for a reply up to `timeout` milliseconds
+        max_retries : int >= 0, optional
+            Retry up to this many times if `timeout` occurs or an empty reply
+
+        Raises
+        ------
+        RuntimeError
+            On reaching timeout and/or empty response beyond max_retries
+
         """
 
         req_id = uuid.uuid4().hex
