@@ -15,7 +15,7 @@ echo "# Starting llh_service..."
 python ./llh_service.py > $SVC_LOG 2>&1 &
 llh_svc_pid=$!
 
-trap "kill $llh_svc_pid" 0
+trap "kill $llh_svc_pid 2>/dev/null" 0
 
 
 printf "# Waiting until llh_service is initialized."
@@ -33,20 +33,14 @@ start=`date +%s`
 echo "# Starting clients..."
 pids=()
 logfiles=()
-i=0
-for mu in {-20..20}
+
+for ((i = 0; i < $N_CLIENTS; i++))
 do
-    for sig in {1..20}
-    do
-        echo "# Launching client #${i} to test mu=${mu}, sig=${sig}..."
-        logfile=logs/"opt_test_${i}_mu=${mu}_n_x=${N_X}_sig=${sig}.log"
-        python ./freedom_test.py $mu > "$logfile" 2>&1 &
-        pids+=($!)
-        logfiles[$i]="$logfile"
-        (( i++ ))
-        (( i >= N_CLIENTS )) && break
-    done
-    (( i >= N_CLIENTS )) && break
+    echo "# Launching client #${i}..."
+    logfile=logs/"freedom_test_${i}.log"
+    python ./freedom_test.py > "$logfile" 2>&1 &
+    pids+=($!)
+    logfiles[$i]="$logfile"
 done
 
 
@@ -55,6 +49,10 @@ for pid in ${pids[*]}
 do
     wait $pid
 done
+
+
+echo "# Clients have finished. Telling llh service to stop."
+python ./kill_service.py
 
 
 N_EVALS=0
@@ -68,13 +66,10 @@ do
     T_MS=$( echo "$T_MS + $t_ms" | bc )
 done
 
+
 printf "# Average time per eval: %.0f us\n" $( echo "($T_MS * 1000) / ($N_EVALS * ${#logfiles[@]})" | bc )
 
 end=`date +%s`
 delta=`expr $end - $start`
 echo "# Total execution time was ${delta} seconds"
 #echo "# Inspect plots to make sure output is reasonable."
-
-
-echo "# Clients have finished. Telling llh service to stop."
-python ./kill_service.py
