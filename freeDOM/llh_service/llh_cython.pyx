@@ -18,6 +18,33 @@ from zmq cimport libzmq, Socket
 
 import zmq
 
+cdef inline int check_zmq_error(int retcode) except -1:
+    cdef errno
+    cdef const char* errstr
+    if retcode < 0:
+        errno = libzmq.zmq_errno()
+        if errno == libzmq.ZMQ_EAGAIN:
+            raise zmq.error.Again
+        else:
+            errstr = libzmq.zmq_strerror(errno)
+            raise zmq.error.ZMQError(errno=errno,
+                                     msg=f'ZMQ error {errno}: {errstr.decode()}')
+
+    return 0
+
+cdef inline int send_error_check(void* sock, libzmq.zmq_msg_t *msg, int flags) except -1:
+    '''
+    convenience function. Sends message, checks errors, and then closes the msg
+    '''
+    try:
+        check_zmq_error(libzmq.zmq_msg_send(msg, sock, flags))
+    finally:
+        # is closing necessary? It's in the python example,
+        # but the zmq guide suggests it's not necessary after sending
+        libzmq.zmq_msg_close(msg)
+
+    return 0
+
 cpdef dispatch_replies(Socket sock, list work_reqs, 
                        np.ndarray[np.float32_t, ndim=1, mode='c'] llhs):
     '''
@@ -39,7 +66,6 @@ cpdef dispatch_replies(Socket sock, list work_reqs,
     cdef int start_ind
     cdef int stop_ind
     cdef int start_byte
-    cdef int errno
 
     for work_req in work_reqs:
         header_frames = work_req["header_frames"]
@@ -49,11 +75,8 @@ cpdef dispatch_replies(Socket sock, list work_reqs,
             
             libzmq.zmq_msg_init_size(&msg, size)
             memcpy(libzmq.zmq_msg_data(&msg), data, size)
-            libzmq.zmq_msg_send(&msg, c_sock, libzmq.ZMQ_SNDMORE)
-            # is closing necessary? It's in the python example,
-            # but the zmq guide suggests it's not necessary after sending
-            libzmq.zmq_msg_close(&msg)
-
+            send_error_check(c_sock, &msg, libzmq.ZMQ_SNDMORE)
+            
         start_ind = work_req["start_ind"]
         stop_ind = work_req["stop_ind"]
         size = (stop_ind - start_ind)*sizeof(np.float32_t)
@@ -61,16 +84,14 @@ cpdef dispatch_replies(Socket sock, list work_reqs,
         
         libzmq.zmq_msg_init_size(&msg, size)
         memcpy(libzmq.zmq_msg_data(&msg), llh_bytes + start_byte, size)
-        libzmq.zmq_msg_send(&msg, c_sock, 0)
-        libzmq.zmq_msg_close(&msg)
-
-
+        send_error_check(c_sock, &msg, 0)
+        
 cpdef dispatch_request(Socket sock,
                        bytes req_id,  
                        np.ndarray[np.float32_t, ndim=1, mode='c'] x,
                        np.ndarray[np.float32_t, ndim=1, mode='c'] theta):
     '''
-    dispatch a request from the LLH clien to the service
+    dispatch a request from the LLH client to the service
     '''
 
     cdef void* c_sock = sock.handle
@@ -85,22 +106,19 @@ cpdef dispatch_request(Socket sock,
     size = len(req_id)
     libzmq.zmq_msg_init_size(&msg, size)
     memcpy(libzmq.zmq_msg_data(&msg), req_id_bytes, size)
-    libzmq.zmq_msg_send(&msg, c_sock, libzmq.ZMQ_SNDMORE)
-    libzmq.zmq_msg_close(&msg)
+    send_error_check(c_sock, &msg, libzmq.ZMQ_SNDMORE)
     
     # send x
     size = len(x)*sizeof(np.float32_t)
     libzmq.zmq_msg_init_size(&msg, size)
     memcpy(libzmq.zmq_msg_data(&msg), x_bytes, size)
-    libzmq.zmq_msg_send(&msg, c_sock, libzmq.ZMQ_SNDMORE)
-    libzmq.zmq_msg_close(&msg)
+    send_error_check(c_sock, &msg, libzmq.ZMQ_SNDMORE)
     
     # send theta
     size = len(theta)*sizeof(np.float32_t)
     libzmq.zmq_msg_init_size(&msg, size)
     memcpy(libzmq.zmq_msg_data(&msg), theta_bytes, size)
-    libzmq.zmq_msg_send(&msg, c_sock, 0)
-    libzmq.zmq_msg_close(&msg)
+    send_error_check(c_sock, &msg, 0)
 
 
 cpdef receive_req(Socket sock):
@@ -119,17 +137,15 @@ cpdef receive_req(Socket sock):
     cdef int more
     cdef size_t size
     cdef const char* data
+    cdef const char* errstr
     while True:
         libzmq.zmq_msg_init(&part)
-        ret = libzmq.zmq_msg_recv(&part, c_sock, libzmq.ZMQ_DONTWAIT)
-        if ret < 0:
-            errno = libzmq.zmq_errno()
+        try:
+            check_zmq_error(libzmq.zmq_msg_recv(&part, c_sock, libzmq.ZMQ_DONTWAIT))
+        except zmq.error.ZMQError:
             libzmq.zmq_msg_close(&part)
-            if errno == libzmq.ZMQ_EAGAIN:
-                raise zmq.error.Again
-            else:
-                raise RuntimeError(f'ZMQ error {errno}')
-
+            raise
+            
         size = libzmq.zmq_msg_size(&part)
         data = <const char*>libzmq.zmq_msg_data(&part)
         frame = data[:size]
