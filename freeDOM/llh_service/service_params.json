@@ -10,9 +10,11 @@
       "n_hypos": 256,
       "n_observations": 6000 
     },
-    "send_hwm": 100000,
-    "recv_hwm": 100000,
+    "send_hwm": 10000,
+    "recv_hwm": 10000,
     "use_freeDOM_model": true,
     "hitnet_file": "../models/HitNet_08_May_2020-16h02/epoch_3675_model.hdf5",
-    "chargenet_file": "../models/ChargeNet_08_May_2020-15h59/epoch_600_model.hdf5"
+    "chargenet_file": "../models/ChargeNet_08_May_2020-15h59/epoch_600_model.hdf5",
+    "router_mandatory": true,
+    "bypass_tensorflow": true
 }

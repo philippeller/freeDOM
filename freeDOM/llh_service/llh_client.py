@@ -81,13 +81,13 @@ class LLHClient:
 
         self._sock.send_multipart([req_id_bytes, x, thetas])
 
-    def recv(self, timeout=1000):
+    def recv(self, timeout=None):
         if self._sock.poll(timeout, zmq.POLLIN) != 0:
             req_id, llh = self._sock.recv_multipart()
             return dict(req_id=req_id.decode(), llh=np.frombuffer(llh, np.float32))
         return None
 
-    def eval_llh(self, x, theta, timeout=1000):
+    def eval_llh(self, x, theta, timeout=None):
         """ synchronous llh evaluation
             blocks until llh is ready
             raises RuntimeError on timeout

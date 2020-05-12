@@ -84,6 +84,7 @@ class LLHService:
         use_freeDOM_model=False,
         hitnet_file=None,
         chargenet_file=None,
+        router_mandatory=False,
         bypass_tensorflow=False,
     ):
         self._work_reqs = []
@@ -148,7 +149,11 @@ class LLHService:
         self._last_flush = 0
 
         self._init_sockets(
-            req_addr=req_addr, ctrl_addr=ctrl_addr, send_hwm=send_hwm, recv_hwm=recv_hwm
+            req_addr=req_addr,
+            ctrl_addr=ctrl_addr,
+            send_hwm=send_hwm,
+            recv_hwm=recv_hwm,
+            router_mandatory=router_mandatory,
         )
 
         # trace-compile the llh function in advance
@@ -199,13 +204,15 @@ class LLHService:
             if time.time() - self._last_flush > flush_period:
                 self._flush()
 
-    def _init_sockets(self, req_addr, ctrl_addr, send_hwm, recv_hwm):
+    def _init_sockets(self, req_addr, ctrl_addr, send_hwm, recv_hwm, router_mandatory):
         # pylint: disable=no-member
         self._ctxt = zmq.Context()
 
         req_sock = self._ctxt.socket(zmq.ROUTER)
         req_sock.setsockopt(zmq.SNDHWM, send_hwm)
         req_sock.setsockopt(zmq.RCVHWM, recv_hwm)
+        if router_mandatory:
+            req_sock.setsockopt(zmq.ROUTER_MANDATORY, 1)
         req_sock.bind(req_addr)
 
         ctrl_sock = self._ctxt.socket(zmq.PULL)
