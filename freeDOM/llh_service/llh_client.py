@@ -96,7 +96,7 @@ class LLHClient:
         req_id_bytes = str(req_id).encode()
 
         # self._sock.send_multipart([req_id_bytes, x, thetas])
-        llh_cython.dispatch_request(self._sock, req_id_bytes, x, theta)
+        llh_cython.dispatch_request(self._sock, req_id_bytes, x, thetas)
 
     def recv(self, timeout=None):
         if self._sock.poll(timeout, zmq.POLLIN) != 0:
