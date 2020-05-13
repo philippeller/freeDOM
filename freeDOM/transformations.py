@@ -1,5 +1,6 @@
 """Transformation tensorflow layers"""
 import tensorflow as tf
+import numpy as np
 from scipy import constants
 
 
@@ -128,7 +129,12 @@ class chargenet_trafo(tf.keras.layers.Layer):
         self.z_idx = labels.index('z')
         self.cascade_energy_idx = labels.index('cascade_energy')
         self.track_energy_idx = labels.index('track_energy')
-   
+        
+        
+        geo = np.load('geo_array.npy')
+        
+        self.geo = tf.constant(geo.reshape(-1, 3).astype(np.float32))
+        
     def get_config(self):
         return {'labels': self.labels}
     
@@ -149,6 +155,23 @@ class chargenet_trafo(tf.keras.layers.Layer):
         dir_y = tf.math.sin(params[:, self.zenith_idx]) * tf.math.sin(params[:, self.azimuth_idx])
         dir_z = tf.math.cos(params[:, self.zenith_idx])
 
+        # calculate sum of 1/r^2 distances to DOMs as maybe helpful input to the NN
+        dist_x = tf.math.squared_difference(tf.expand_dims(self.geo[:, 0], 1), tf.expand_dims(params[:, self.x_idx], 0))
+        dist_y = tf.math.squared_difference(tf.expand_dims(self.geo[:, 1], 1), tf.expand_dims(params[:, self.y_idx], 0))
+        dist_z = tf.math.squared_difference(tf.expand_dims(self.geo[:, 2], 1), tf.expand_dims(params[:, self.z_idx], 0))
+
+        dist = tf.clip_by_value(dist_x + dist_y + dist_z, 1, 1e6)
+        dist_rho = tf.clip_by_value(dist_x + dist_y, 1, 1e6)
+        dist_x = tf.clip_by_value(dist_x, 1, 1e6)
+        dist_y = tf.clip_by_value(dist_y, 1, 1e6)
+        dist_z = tf.clip_by_value(dist_z, 1, 1e6)
+
+        dist = tf.reduce_sum(tf.math.divide_no_nan(1., dist), 0) 
+        dist_rho = tf.reduce_sum(tf.math.divide_no_nan(1., dist_rho), 0)
+        dist_x = tf.reduce_sum(tf.math.divide_no_nan(1., dist_x), 0)
+        dist_y = tf.reduce_sum(tf.math.divide_no_nan(1., dist_y), 0)
+        dist_z = tf.reduce_sum(tf.math.divide_no_nan(1., dist_z), 0)
+        
         out = tf.stack([
                  charge[:,0],
                  params[:, self.x_idx],
@@ -158,7 +181,12 @@ class chargenet_trafo(tf.keras.layers.Layer):
                  dir_y,
                  dir_z,
                  params[:, self.cascade_energy_idx],
-                  params[:, self.track_energy_idx]
+                 params[:, self.track_energy_idx],
+                 dist / 5160.,
+                 #dist_rho,
+                 dist_x/ 5160.,
+                 dist_y/ 5160.,
+                 dist_z/ 5160.,
                 ],
                 axis=1
                 )            
