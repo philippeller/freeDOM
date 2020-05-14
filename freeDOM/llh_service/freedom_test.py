@@ -25,14 +25,7 @@ def main():
     with open("service_params.json") as f:
         params = json.load(f)
 
-    client = LLHClient(
-        req_addr=params["req_addr"],
-        batch_size=params["batch_size"],
-        n_hypo_params=params["n_hypo_params"],
-        n_obs_features=params["n_obs_features"],
-    )
-
-    # test a single synchronous eval
+    client = LLHClient(ctrl_addr=params["ctrl_addr"], conf_timeout=20000)
 
     with open("../test_data/test_event.pkl", "rb") as f:
         event = pickle.load(f)
@@ -43,7 +36,7 @@ def main():
     llhs = []
     start = time.time()
     for i in range(N_ITERATIONS):
-        llhs.append(client.eval_llh(hits, theta))
+        llhs.append(client.eval_llh(hits, theta, timeout=10000))
     delta = time.time() - start
 
     print(
