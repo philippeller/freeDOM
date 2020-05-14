@@ -36,7 +36,7 @@ def main():
     llhs = []
     start = time.time()
     for i in range(N_ITERATIONS):
-        llhs.append(client.eval_llh(hits, theta, timeout=10000))
+        llhs.append(client.eval_llh(hits, theta))
     delta = time.time() - start
 
     print(
