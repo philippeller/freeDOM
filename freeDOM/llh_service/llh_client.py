@@ -214,7 +214,7 @@ class LLHClient:
                 f"theta.size must be divisible by the number of hypothesis parameters ({self._n_hypo_params})"
             )
 
-        return x.reshape(x.size,), theta.reshape(theta.size,)
+        return x, theta
 
     @staticmethod
     def _as_flat_float_array(arr):
