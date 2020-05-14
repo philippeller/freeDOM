@@ -71,6 +71,7 @@ class LLHService:
         "_req_sock",
         "_ctrl_sock",
         "_last_flush",
+        "_client_conf",
     ]
 
     def __init__(
@@ -79,7 +80,6 @@ class LLHService:
         ctrl_addr,
         poll_timeout,
         flush_period,
-        model_file,
         n_hypo_params,
         n_obs_features,
         batch_size,
@@ -87,6 +87,7 @@ class LLHService:
         recv_hwm,
         transform_params=None,
         use_freeDOM_model=False,
+        model_file=None,
         hitnet_file=None,
         chargenet_file=None,
         router_mandatory=False,
@@ -169,6 +170,14 @@ class LLHService:
             self._model,
         )
 
+        # store configuration info for clients
+        self._client_conf = dict(
+            batch_size=batch_size,
+            n_hypo_params=n_hypo_params,
+            n_obs_features=n_obs_features,
+            req_addr=req_addr,
+        )
+
         # # jit compile self._fill_tables
         # self._fill_tables(
         #     self._x_table,
@@ -197,10 +206,10 @@ class LLHService:
 
             for sock, _ in events:
                 if sock is self._req_sock:
-                    self._process_all_reqs()
+                    self._process_reqs()
                 elif sock is self._ctrl_sock:
-                    action = self._process_ctrl_cmd()
-                    if action == "die":
+                    cmd = self._process_ctrl_cmd()
+                    if cmd == "die":
                         print("Received die command... flushing and exiting")
                         self._flush()
                         return
@@ -219,7 +228,7 @@ class LLHService:
             req_sock.setsockopt(zmq.ROUTER_MANDATORY, 1)
         req_sock.bind(req_addr)
 
-        ctrl_sock = self._ctxt.socket(zmq.PULL)
+        ctrl_sock = self._ctxt.socket(zmq.REP)
         ctrl_sock.bind(ctrl_addr)
 
         self._req_sock = req_sock
@@ -340,9 +349,12 @@ class LLHService:
         )
 
     # @profile
-    def _process_all_reqs(self):
+    def _process_reqs(self):
+        """
+        process up to n_hypos requests before yielding control
+        """
         # pylint: disable=no-member
-        while True:
+        for _ in range(self._n_hypos):
             try:
                 # frames = self._req_sock.recv_multipart(zmq.DONTWAIT)
                 frames = llh_cython.receive_req(self._req_sock)
@@ -353,14 +365,15 @@ class LLHService:
 
     def _process_ctrl_cmd(self):
         """read a message from the ctrl socket
-        currently the only valid control command is "die",
-        which commands the service to exit the work loop.
+        currently the only valid control commands are "die",
+        which commands the service to exit the work loop,
+        and "conf", which sends the client conf
 
         Could become more complicated later
         """
         # pylint: disable=no-member
         try:
-            return self._ctrl_sock.recv_string(zmq.DONTWAIT)
+            cmd = self._ctrl_sock.recv_string(zmq.DONTWAIT)
         except zmq.error.Again:
             # this should never happen, we are receiving only after polling.
             # print a message and raise again
@@ -369,6 +382,15 @@ class LLHService:
                 " the poller indicated an event was ready!"
             )
             raise
+
+        if cmd == "die":
+            self._ctrl_sock.send_string("dying")
+        elif cmd == "conf":
+            self._ctrl_sock.send_json(self._client_conf)
+        else:
+            self._ctrl_sock.send_sting("?")
+
+        return cmd
 
     def _flush(self):
         self._last_flush = time.time()
