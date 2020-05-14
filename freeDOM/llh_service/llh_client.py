@@ -77,7 +77,7 @@ class LLHClient:
         if n_obs * n_hypos > self._max_obs_per_batch:
             raise RuntimeError(
                 f"Asynchronous requests are limited to {self._max_obs_per_batch} total pulses "
-                f"per req, but {n_obs:.0f} were requested!"
+                f"per req, but {n_obs*n_hypos:.0f} were requested!"
             )
 
         # send a req_id string for development and debugging
