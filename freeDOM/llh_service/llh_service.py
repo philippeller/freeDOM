@@ -388,7 +388,7 @@ class LLHService:
         elif cmd == "conf":
             self._ctrl_sock.send_json(self._client_conf)
         else:
-            self._ctrl_sock.send_sting("?")
+            self._ctrl_sock.send_string("?")
 
         return cmd
 
