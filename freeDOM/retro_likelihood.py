@@ -65,21 +65,22 @@ class retroLLH():
         sd_idx_table_indexer = self.dom_tables.sd_idx_table_indexer
         event_dom_info = np.zeros(shape=num_operational_doms, dtype=EVT_DOM_INFO_T)
 
-        copy_fields = [                                                                                                                                                                                                           
-                    "sd_idx",                                                                                                                                                                                                              
-                    "x",                                                                                                                                                                                                                   
-                    "y",                                                                                                                                                                                                                   
-                    "z",                                                                                                                                                                                                                   
-                    "quantum_efficiency",                                                                                                                                                                                                  
-                    "noise_rate_per_ns",]      
-
+        copy_fields = [
+                    "sd_idx",
+                    "x",
+                    "y",
+                    "z",
+                    "quantum_efficiency",
+                    "noise_rate_per_ns",]
+        
         # Fill `event_{hit,dom}_info` arrays only for operational DOMs                                                                                                                                                         
-        for dom_idx, this_dom_info in enumerate(dom_info[dom_info["operational"]]):                                                                                                                                                
-            this_event_dom_info = event_dom_info[dom_idx : dom_idx + 1]                                                                                                                                                            
-            this_event_dom_info[copy_fields] = this_dom_info[copy_fields]                                                                                                                                                          
-            sd_idx = this_dom_info["sd_idx"]                                                                                                                                                                                       
-            this_event_dom_info["table_idx"] = sd_idx_table_indexer[sd_idx]                                                                                                                                                                                                                                                                                                                                                                               
-            # Copy any hit info from `hits_indexer` and total charge from                                                                                                                                                          
+        for dom_idx, this_dom_info in enumerate(dom_info[dom_info["operational"]]):                                                                                                                               
+            this_event_dom_info = event_dom_info[dom_idx : dom_idx + 1]
+            this_event_dom_info[copy_fields] = this_dom_info[copy_fields]
+            sd_idx = this_dom_info["sd_idx"]
+            this_event_dom_info["table_idx"] = sd_idx_table_indexer[sd_idx]
+            
+            # Copy any hit info from `hits_indexer` and total charge from
             # `hits` into `event_hit_info` and `event_dom_info` arrays
             hit_indices = event_hit_info['event_dom_idx'] == sd_idx
             if np.any(hit_indices):
@@ -87,7 +88,6 @@ class retroLLH():
                 this_event_dom_info["hits_start_idx"] = w[0]
                 this_event_dom_info["hits_stop_idx"] = w[-1] + 1
                 this_event_dom_info["total_observed_charge"] = np.sum(event_hit_info['charge'][hit_indices])
-
                 
         llhs = np.zeros(n_points, dtype=np.float32)
         for i in range(n_points):
