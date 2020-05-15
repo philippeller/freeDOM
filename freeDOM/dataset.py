@@ -9,18 +9,20 @@ from sklearn.model_selection import train_test_split
 
 class Data():
     def __init__(self,
-                 dir='/home/iwsatlas1/peller/work/oscNext/level7_v01.04/140000_i3cols',
+                 dirs=['/home/iwsatlas1/peller/work/oscNext/level7_v01.04/140000_i3cols'],
                  labels=['x', 'y', 'z', 'time', 'azimuth','zenith', 'cascade_energy', 'track_energy'],
                  geo='geo_array.npy',
                 ):
         
-        d = load_data(dir=dir, labels=labels, geo=geo)
+        data = []
+        for dir in dirs:
+            data.append(load_data(dir=dir, labels=labels, geo=geo))
         
-        self.single_hits = d[0]
-        self.repeated_params = d[1]
-        self.total_charge = d[2]
-        self.params = d[3]
-        self.labels = d[4]
+        self.single_hits = np.concatenate([d[0] for d in data])
+        self.repeated_params = np.concatenate([d[1] for d in data])
+        self.total_charge = np.concatenate([d[2] for d in data])
+        self.params = np.concatenate([d[3] for d in data])
+        self.labels = data[0][4]
         
     
     def get_hitnet_data(self, train_batch_size=1024, test_batch_size=256, test_size=0.01, random_state=42):
