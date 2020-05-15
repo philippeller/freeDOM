@@ -1,5 +1,6 @@
 """Transformation tensorflow layers"""
 import tensorflow as tf
+import numpy as np
 from scipy import constants
 
 
@@ -128,7 +129,7 @@ class chargenet_trafo(tf.keras.layers.Layer):
         self.z_idx = labels.index('z')
         self.cascade_energy_idx = labels.index('cascade_energy')
         self.track_energy_idx = labels.index('track_energy')
-   
+        
     def get_config(self):
         return {'labels': self.labels}
     
@@ -148,7 +149,7 @@ class chargenet_trafo(tf.keras.layers.Layer):
         dir_x = tf.math.sin(params[:, self.zenith_idx]) * tf.math.cos(params[:, self.azimuth_idx])
         dir_y = tf.math.sin(params[:, self.zenith_idx]) * tf.math.sin(params[:, self.azimuth_idx])
         dir_z = tf.math.cos(params[:, self.zenith_idx])
-
+        
         out = tf.stack([
                  charge[:,0],
                  params[:, self.x_idx],
@@ -158,7 +159,7 @@ class chargenet_trafo(tf.keras.layers.Layer):
                  dir_y,
                  dir_z,
                  params[:, self.cascade_energy_idx],
-                  params[:, self.track_energy_idx]
+                 params[:, self.track_energy_idx],
                 ],
                 axis=1
                 )            
