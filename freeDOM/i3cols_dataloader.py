@@ -72,15 +72,19 @@ def load_data(dir='/home/iwsatlas1/peller/work/oscNext/level7_v01.04/140000_i3co
     geo = np.load(geo)
     
     # constrcut hits array
-
+    
     # shape N x (x, y, z, t, q)
-    single_hits = np.empty(hits.shape + (5,), dtype=dtype)
+    single_hits = np.empty(hits.shape + (9,), dtype=dtype)
     string_idx = hits['key']['string'] - 1
     om_idx = hits['key']['om'] - 1
 
     single_hits[:, 0:3] = geo[string_idx, om_idx]
     single_hits[:, 3] = hits['pulse']['time']
     single_hits[:, 4] = hits['pulse']['charge']
+    single_hits[:, 5] = hits['pulse']['flags'] & 1 # is LC or not?
+    single_hits[:, 6] = (hits['pulse']['flags'] & 2) / 2 # has ATWD or not?
+    single_hits[:, 7] = string_idx
+    single_hits[:, 8] = om_idx
     
     total_charge = get_total_charge(hits, hits_idx, dtype=dtype)
     
