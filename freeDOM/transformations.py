@@ -11,7 +11,7 @@ class hitnet_trafo(tf.keras.layers.Layer):
     speed_of_light = constants.c * 1e-9 # c in m / ns
 
     
-    def __init__(self, labels):
+    def __init__(self, labels, min_energy=0.1, max_energy=1e4):
         '''
         Parameters:
         -----------
@@ -23,6 +23,8 @@ class hitnet_trafo(tf.keras.layers.Layer):
         super().__init__()
 
         self.labels = labels
+        self.min_energy = min_energy
+        self.max_energy = max_energy
         
         self.azimuth_idx = labels.index('azimuth')
         self.zenith_idx = labels.index('zenith')
@@ -32,6 +34,12 @@ class hitnet_trafo(tf.keras.layers.Layer):
         self.z_idx = labels.index('z')
         self.cascade_energy_idx = labels.index('cascade_energy')
         self.track_energy_idx = labels.index('track_energy')
+        
+        
+        #self.e_cscd_bias = self.add_weight(shape=(1,), initializer="zeros", trainable=True)
+        #self.e_cscd_scale = self.add_weight(shape=(1,), initializer="zeros", trainable=True)
+        #loc_x_bias
+        
         
     def get_config(self):
         return {'labels': self.labels}
@@ -61,7 +69,7 @@ class hitnet_trafo(tf.keras.layers.Layer):
         dy = params[:, self.y_idx] - hit[:,1]
         dz = params[:, self.z_idx] - hit[:,2]
         
-        
+        # distance DOM - vertex
         rho = tf.math.sqrt(tf.math.square(dx) + tf.math.square(dy))
         dist = tf.math.sqrt(tf.math.square(dx) + tf.math.square(dy) + tf.math.square(dz))     
         
@@ -72,20 +80,27 @@ class hitnet_trafo(tf.keras.layers.Layer):
                                                 )
                                             )
                                 )
-        costheta = tf.math.divide_no_nan(rho, dist)
 
+        
+
+        costhetadir = tf.math.divide_no_nan(rho, dist)
+        sinthetadir = tf.sqrt(1 - tf.math.square(costhetadir))
+        
+        # so it is 0 at the poles?
+        absdeltaphidir *= sintheta * sinthetadir
+        
         dt = hit[:,3] - params[:, self.time_idx]
               
         # difference c*t - r
-        delta = dt * self.speed_of_light - dist
+        delta = dt * self.speed_of_light - dist        
 
-        cascade_energy = params[:, self.cascade_energy_idx]
-        track_energy = params[:, self.track_energy_idx]
+        cascade_energy = tf.math.log(tf.clip_by_value(params[:, self.cascade_energy_idx], self.min_energy, self.max_energy))
+        track_energy = tf.math.log(tf.clip_by_value(params[:, self.track_energy_idx], self.min_energy, self.max_energy))
         
         out = tf.stack([
                  delta,
                  dist,
-                 costheta,
+                 costhetadir,
                  absdeltaphidir,
                  dir_x,
                  dir_y,
@@ -93,9 +108,13 @@ class hitnet_trafo(tf.keras.layers.Layer):
                  dx,
                  dy,
                  dz,
-                 params[:, self.x_idx],
-                 params[:, self.y_idx],
-                 params[:, self.z_idx],
+                 hit[:,0],
+                 hit[:,1],
+                 hit[:,2],
+                 hit[:,5],
+                 hit[:,6],
+                 #hit[:,7],
+                 #hit[:,8],
                  cascade_energy,
                  track_energy
                 ],
@@ -109,7 +128,7 @@ class chargenet_trafo(tf.keras.layers.Layer):
     '''Class to transfor inputs for Charget Net
     '''
     
-    def __init__(self, labels):
+    def __init__(self, labels, min_energy=0.1, max_energy=1e4):
         '''
         Parameters:
         -----------
@@ -121,7 +140,9 @@ class chargenet_trafo(tf.keras.layers.Layer):
         super().__init__()
         
         self.labels = labels
-        
+        self.min_energy = min_energy
+        self.max_energy = max_energy
+                
         self.azimuth_idx = labels.index('azimuth')
         self.zenith_idx = labels.index('zenith')
         self.x_idx = labels.index('x')
@@ -150,6 +171,10 @@ class chargenet_trafo(tf.keras.layers.Layer):
         dir_y = tf.math.sin(params[:, self.zenith_idx]) * tf.math.sin(params[:, self.azimuth_idx])
         dir_z = tf.math.cos(params[:, self.zenith_idx])
         
+
+        cascade_energy = tf.math.log(tf.clip_by_value(params[:, self.cascade_energy_idx], self.min_energy, self.max_energy))
+        track_energy = tf.math.log(tf.clip_by_value(params[:, self.track_energy_idx], self.min_energy, self.max_energy))        
+
         out = tf.stack([
                  charge[:,0],
                  params[:, self.x_idx],
@@ -158,8 +183,8 @@ class chargenet_trafo(tf.keras.layers.Layer):
                  dir_x,
                  dir_y,
                  dir_z,
-                 params[:, self.cascade_energy_idx],
-                 params[:, self.track_energy_idx],
+                 cascade_energy,
+                 track_energy,
                 ],
                 axis=1
                 )            
