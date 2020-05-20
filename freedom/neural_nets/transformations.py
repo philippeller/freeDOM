@@ -190,3 +190,8 @@ class chargenet_trafo(tf.keras.layers.Layer):
                 )            
 
         return out
+
+
+def test_hitnet_trafo():
+    t = hitnet_trafo(labels = ['x', 'y', 'z', 'time', 'azimuth','zenith', 'cascade_energy', 'track_energy'])
+    t(np.zeros((1, 9), dtype=np.float32), np.ones((1, 8), dtype=np.float32))
