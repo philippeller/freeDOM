@@ -1,17 +1,16 @@
 """Module to create tf.data.DataSet instances for training"""
+import pkg_resources
 import numpy as np
 import tensorflow as tf
 from i3cols_dataloader import load_data
 from sklearn.model_selection import train_test_split
 
 
-
-
 class Data():
     def __init__(self,
                  dirs=['/home/iwsatlas1/peller/work/oscNext/level7_v01.04/140000_i3cols'],
                  labels=['x', 'y', 'z', 'time', 'azimuth','zenith', 'cascade_energy', 'track_energy'],
-                 geo='geo_array.npy',
+                 geo=pkg_resources.resource_filename('freedom', 'resources/geo_array.npy'),
                 ):
         
         data = []

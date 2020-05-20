@@ -1,9 +1,7 @@
 import tensorflow as tf
 import numpy as np
 
-from transformations import chargenet_trafo, hitnet_trafo
-
-
+from freedom.neural_nets.transformations import chargenet_trafo, hitnet_trafo
 
 class LLH():
     def __init__(self,
