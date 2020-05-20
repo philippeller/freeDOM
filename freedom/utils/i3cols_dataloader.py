@@ -55,7 +55,7 @@ def load_data(dir='/home/iwsatlas1/peller/work/oscNext/level7_v01.04/140000_i3co
     Returns:
     --------
     single_hits : ndarray
-        shape (N_hits, 5)
+        shape (N_hits, 9)
     repeated_params : ndarray
         shape (N_hits, len(labels))
     total_charge : ndarray
@@ -125,7 +125,7 @@ def load_events(dir='/home/iwsatlas1/peller/work/oscNext/level7_v01.04/140000_i3
     --------
     list of:
         single_hits : ndarray
-            shape (N_hits, 5)
+            shape (N_hits, 9)
         total_charge : float
         params : ndarray
             shape (len(labels))
