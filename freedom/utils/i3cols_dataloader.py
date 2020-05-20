@@ -2,6 +2,7 @@
 i3cols is available here: https://github.com/jllanfranchi/i3cols
 '''
 import os
+import pkg_resources
 import numpy as np
 
 def get_energies(mcprimary, mctree, mctree_idx, dtype=np.float32):
@@ -46,7 +47,7 @@ def get_total_charge(hits, hits_idx, dtype=np.float32):
 
 def load_data(dir='/home/iwsatlas1/peller/work/oscNext/level7_v01.04/140000_i3cols',
               labels=['x', 'y', 'z', 'time', 'azimuth','zenith', 'cascade_energy', 'track_energy'],
-              geo='geo_array.npy',
+              geo=pkg_resources.resource_filename('freedom', 'resources/geo_array.npy'),
               dtype=np.float32):
     """
     Create training data for hit and charge net
@@ -114,7 +115,7 @@ def load_data(dir='/home/iwsatlas1/peller/work/oscNext/level7_v01.04/140000_i3co
 
 def load_events(dir='/home/iwsatlas1/peller/work/oscNext/level7_v01.04/140000_i3cols',
               labels=['x', 'y', 'z', 'time', 'azimuth','zenith', 'cascade_energy', 'track_energy'],
-              geo='geo_array.npy',
+              geo=pkg_resources.resource_filename('freedom', 'resources/geo_array.npy'),
               recos = {},
               dtype=np.float32):
     """
@@ -147,7 +148,20 @@ def load_events(dir='/home/iwsatlas1/peller/work/oscNext/level7_v01.04/140000_i3
             elif label == 'azimuth': reco_params[r][:, i] = reco['dir']['azimuth']
             elif label == 'zenith': reco_params[r][:, i] = reco['dir']['zenith']
             elif label == 'energy': reco_params[r][:, i] = reco['energy']
+        
+        # for retro unfortunately these are in different keys...
+        if 'track_energy' in labels and f.strip('/').endswith('__neutrino'):
+            reco_track = np.load(os.path.join(dir, f.replace('__neutrino','__track'), 'data.npy'))
+            idx = labels.index('track_energy')
+            reco_params[r][:, idx] = reco_track['energy']
 
+        if 'cascade_energy' in labels and f.strip('/').endswith('__neutrino'):
+            reco_track = np.load(os.path.join(dir, f.replace('__neutrino','__cascade'), 'data.npy'))
+            idx = labels.index('cascade_energy')
+            reco_params[r][:, idx] = reco_track['energy']
+            
+
+            
     events = []
     
     for i in range(len(total_charge)):
