@@ -13,7 +13,7 @@ import uuid
 import numpy as np
 import zmq
 
-from freeDOM.llh_service import llh_cython
+from freedom.llh_service import llh_cython
 
 
 class LLHClient:

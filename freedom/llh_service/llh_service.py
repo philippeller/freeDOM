@@ -24,9 +24,9 @@ FREEDOM_DIR = os.path.dirname(
 )
 if FREEDOM_DIR not in sys.path:
     sys.path.append(FREEDOM_DIR)
-from freeDOM.transformations import chargenet_trafo, hitnet_trafo
-from freeDOM.llh_service import llh_cython
-from freeDOM.llh_service import eval_llh
+from freedom.neural_nets.transformations import chargenet_trafo, hitnet_trafo
+from freedom.llh_service import llh_cython
+from freedom.llh_service import eval_llh
 
 
 def wstdout(s):
