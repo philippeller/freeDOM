@@ -27,30 +27,44 @@ install_requires = [
 ]
 
 # handle cython extension
-import numpy
-import zmq
-
-# adapted from https://cython.readthedocs.io/en/latest/src/userguide/source_files_and_compilation.html
-USE_CYTHON = True
-
+# adapted from https://stackoverflow.com/questions/2379898/make-distutils-look-for-numpy-header-files-in-the-correct-place
 try:
-    from Cython.Build import cythonize
-except ImportError:
-    USE_CYTHON = False
+    from Cython.Distutils import build_ext
+except:
+    # If we couldn't import Cython, use the normal setuptools
+    # and look for a pre-compiled .c file instead of a .pyx file
+    from setuptools.command.build_ext import build_ext
 
-ext = ".pyx" if USE_CYTHON else ".c"
+    ext = ".c"
+else:
+    # If we successfully imported Cython, look for a .pyx file
+    ext = ".pyx"
 
 extensions = [
     Extension(
         "freedom.llh_service.llh_cython",
         ["freedom/llh_service/llh_cython" + ext],
-        include_dirs=zmq.get_includes() + [numpy.get_include()],
         extra_link_args=["-lzmq"],
     )
 ]
 
-if USE_CYTHON:
-    extensions = cythonize(extensions)
+
+class CustomBuildExtCommand(build_ext):
+    """build_ext command for use when numpy headers are needed."""
+
+    def run(self):
+
+        # Import numpy here, only when headers are needed
+        import numpy
+        import zmq
+
+        # Add numpy/zmq headers to include_dirs
+        self.include_dirs.append(numpy.get_include())
+        self.include_dirs.extend(zmq.get_includes())
+
+        # Call original build_ext command
+        build_ext.run(self)
+
 
 # If tensorflow-gpu is installed, use that
 if get_dist("tensorflow") is None and get_dist("tensorflow-gpu") is not None:
@@ -72,5 +86,6 @@ setup(
     packages=find_packages(),
     package_data={"freedom.resources": ["*.npy", "*.csv", "*.pkl", "*.hdf5"],},
     zip_safe=False,
+    cmdclass={"build_ext": CustomBuildExtCommand},
     ext_modules=extensions,
 )
