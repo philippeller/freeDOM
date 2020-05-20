@@ -27,8 +27,8 @@ def main():
 
     client = LLHClient(ctrl_addr=params["ctrl_addr"], conf_timeout=20000)
 
-    with open("../test_data/test_event.pkl", "rb") as f:
-        event = pickle.load(f)
+    with open("../resources/test_data/test_events.pkl", "rb") as f:
+        event = pickle.load(f)[8]
 
     hits = event["hits"].flatten()
     theta = event["params"].flatten()

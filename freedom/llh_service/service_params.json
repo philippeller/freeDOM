@@ -5,7 +5,7 @@
     "flush_period": 1,
     "model_file": "gaussian_nn_2million.h5",
     "n_hypo_params": 8,
-    "n_obs_features": 5,
+    "n_obs_features": 9,
     "batch_size" : {
       "n_hypos": 256,
       "n_observations": 6000 
@@ -13,8 +13,8 @@
     "send_hwm": 10000,
     "recv_hwm": 10000,
     "use_freeDOM_model": true,
-    "hitnet_file": "../models/HitNet_08_May_2020-16h02/epoch_3675_model.hdf5",
-    "chargenet_file": "../models/ChargeNet_08_May_2020-15h59/epoch_600_model.hdf5",
+    "hitnet_file": "../resources/models/HitNet_logE18_May_2020-21h02/epoch_32_model.hdf5",
+    "chargenet_file": "../resources/models/ChargeNet_logE_18_May_2020-21h03/epoch_400_model.hdf5",
     "router_mandatory": true,
     "bypass_tensorflow": false
 }
