@@ -1,3 +1,5 @@
+import pytest
+pytest.skip("Skipping retro module for pytest", allow_module_level=True)
 import numpy as np
 from retro import init_obj
 from retro.retro_types import EVT_DOM_INFO_T, EVT_HIT_INFO_T, FitStatus
