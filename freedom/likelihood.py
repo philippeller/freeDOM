@@ -1,9 +1,7 @@
 import tensorflow as tf
 import numpy as np
 
-from transformations import chargenet_trafo, hitnet_trafo
-
-
+from freedom.neural_nets.transformations import chargenet_trafo, hitnet_trafo
 
 class LLH():
     def __init__(self,
@@ -14,8 +12,14 @@ class LLH():
                  hitnet_batchsize = 2**15,
                  ):
         '''
+        hitnet_file : str
+            location of HitNet model hdf5 file
+        chargenet_file : str
+            location of ChargeNet model hdf5 file
         epsilon : float
             value to clip discriminator output at to avoid division by zero
+        chargenet_batchsize : int
+        hitnet_batchsize : int
         '''
         self.hitnet = tf.keras.models.load_model(hitnet_file, custom_objects={'hitnet_trafo':hitnet_trafo})
         self.chargenet = tf.keras.models.load_model(chargenet_file, custom_objects={'chargenet_trafo':chargenet_trafo})
@@ -30,7 +34,7 @@ class LLH():
         event : dict containing:
             'total_charge' : float
             'hits' : array shape (n_hits, 5)
-                each row is (x, y, z) DOM poitions, time, charge
+                each row is (x, y, z) DOM poitions, time, charge, LC flag, ATWD flag
         params : ndarray
             shape (n_likelihood_points, len(labels)) 
 

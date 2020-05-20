@@ -1,3 +1,5 @@
+import pytest
+pytest.skip("Skipping retro module for pytest", allow_module_level=True)
 import numpy as np
 from retro import init_obj
 from retro.retro_types import EVT_DOM_INFO_T, EVT_HIT_INFO_T, FitStatus
@@ -14,11 +16,7 @@ class retroLLH():
                  cascade_kernel='aligned_one_dim',
                  track_kernel='table_energy_loss',
                  track_time_step=1,
-                 geo='geo_array.npy',
                  ):
-
-        if not isinstance(geo, np.ndarray):
-            self.geo = np.load(geo)
 
         self.dom_tables = init_obj.setup_dom_tables(dom_tables_kind=dom_tables_kind, 
                                        dom_tables_fname_proto=dom_tables_fname_proto, 
@@ -32,12 +30,6 @@ class retroLLH():
                                             track_kernel=track_kernel,
                                             track_time_step=track_time_step)
         
-        
-    def get_domidx(self, hit):
-        '''stupid method to do backwards lookup'''
-        string_idx = np.where(np.isclose(self.geo[:, 0],hit[0]))[0][0]
-        dom_idx = np.where(np.isclose(self.geo[string_idx, :],hit[2]))[0][0]
-        return string_idx + dom_idx * 86
         
     def __call__(self, event, params):
         """Evaluate LLH for a given event + params
@@ -56,7 +48,7 @@ class retroLLH():
         # create all the crazy arrays needed by retro:
         event_hit_info = np.zeros(shape=event['hits'].shape[0], dtype=EVT_HIT_INFO_T)
         for i in range(event['hits'].shape[0]):
-            event_hit_info[i]['event_dom_idx'] = self.get_domidx(event['hits'][i])
+            event_hit_info[i]['event_dom_idx'] = event['hits'][i][7] + 86 * event['hits'][i][8]
             event_hit_info[i]['time'] = event['hits'][i][3]
             event_hit_info[i]['charge'] = event['hits'][i][4]
 
