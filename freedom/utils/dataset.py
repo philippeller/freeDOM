@@ -2,7 +2,7 @@
 import pkg_resources
 import numpy as np
 import tensorflow as tf
-from i3cols_dataloader import load_data
+from freedom.utils.i3cols_dataloader import load_data
 from sklearn.model_selection import train_test_split
 
 
