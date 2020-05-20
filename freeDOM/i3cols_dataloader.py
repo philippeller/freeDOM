@@ -147,7 +147,20 @@ def load_events(dir='/home/iwsatlas1/peller/work/oscNext/level7_v01.04/140000_i3
             elif label == 'azimuth': reco_params[r][:, i] = reco['dir']['azimuth']
             elif label == 'zenith': reco_params[r][:, i] = reco['dir']['zenith']
             elif label == 'energy': reco_params[r][:, i] = reco['energy']
+        
+        # for retro unfortunately these are in different keys...
+        if 'track_energy' in labels and f.strip('/').endswith('__neutrino'):
+            reco_track = np.load(os.path.join(dir, f.replace('__neutrino','__track'), 'data.npy'))
+            idx = labels.index('track_energy')
+            reco_params[r][:, idx] = reco_track['energy']
 
+        if 'cascade_energy' in labels and f.strip('/').endswith('__neutrino'):
+            reco_track = np.load(os.path.join(dir, f.replace('__neutrino','__cascade'), 'data.npy'))
+            idx = labels.index('cascade_energy')
+            reco_params[r][:, idx] = reco_track['energy']
+            
+
+            
     events = []
     
     for i in range(len(total_charge)):
