@@ -16,7 +16,7 @@ import pickle
 
 import numpy as np
 
-from llh_client import LLHClient
+from freedom.llh_service.llh_client import LLHClient
 
 N_ITERATIONS = 3600
 

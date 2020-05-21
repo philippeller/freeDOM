@@ -1,13 +1,15 @@
 # -*- coding: utf-8 -*-
 
 """
-Installation script for the frreDOM project
+Installation script for the freeDOM project
 """
 
 from __future__ import absolute_import
 
 from pkg_resources import DistributionNotFound, get_distribution
 from setuptools import setup, Extension, find_packages
+from ctypes.util import find_library
+import os
 
 
 def get_dist(pkgname):
@@ -40,11 +42,19 @@ else:
     # If we successfully imported Cython, look for a .pyx file
     ext = ".pyx"
 
+zmq_lib_path = None
+extra_link_args = []
+zmq_lib = find_library("zmq")
+if zmq_lib is not None:
+    zmq_lib_path = os.path.dirname(zmq_lib)
+    zmq_lib = os.path.basename(zmq_lib)
+    extra_link_args = [f"-l:{zmq_lib}"]
+
 extensions = [
     Extension(
         "freedom.llh_service.llh_cython",
         ["freedom/llh_service/llh_cython" + ext],
-        extra_link_args=["-lzmq"],
+        extra_link_args=extra_link_args,
     )
 ]
 
@@ -62,6 +72,9 @@ class CustomBuildExtCommand(build_ext):
         self.include_dirs.append(numpy.get_include())
         self.include_dirs.extend(zmq.get_includes())
 
+        if zmq_lib_path is not None and zmq_lib_path != "":
+            self.library_dirs.append(zmq_lib_path)
+
         # Call original build_ext command
         build_ext.run(self)
 
@@ -74,7 +87,9 @@ if get_dist("tensorflow") is None and get_dist("tensorflow-gpu") is not None:
 
 setup(
     name="freedom",
-    description=("approximate likelihood reconstruction for free detector geometries"),
+    description=(
+        "approximate likelihood reconstruction for arbitrary detector geometries"
+    ),
     author="Philipp Eller et al.",
     author_email="peller.phys@gmail.com",
     url="https://github.com/philippeller/freeDOM",
