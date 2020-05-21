@@ -19,7 +19,7 @@ from zmq cimport libzmq, Socket
 import zmq
 
 cdef inline int check_zmq_error(int retcode) except -1:
-    cdef errno
+    cdef int errno
     cdef const char* errstr
     if retcode < 0:
         errno = libzmq.zmq_errno()
@@ -159,4 +159,8 @@ cpdef receive_req(Socket sock):
     return outframes
 
 
+cpdef zmq_version():
+    cdef int major, minor, patch
+    libzmq._zmq_version(&major, &minor, &patch)
+    return f"{major}.{minor}.{patch}"
 
