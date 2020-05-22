@@ -35,13 +35,14 @@ def get_energies(mcprimary, mctree, mctree_idx, dtype=np.float32):
 def get_total_charge(hits, hits_idx, dtype=np.float32):
     '''Get charge per event'''
     
-    total_charge = np.zeros(hits_idx.shape, dtype=dtype)
+    total_charge = np.zeros((hits_idx.shape[0], 2), dtype=dtype)
     
     for i in range(len(hits_idx)):
         this_idx = hits_idx[i]
         this_hits = hits[this_idx['start'] : this_idx['stop']]
 
-        total_charge[i] = np.sum(this_hits['pulse']['charge'])
+        total_charge[i][0] = np.sum(this_hits['pulse']['charge'])
+        total_charge[i][1] = len(np.unique(this_hits['key']))
         
     return total_charge
 
@@ -59,7 +60,7 @@ def load_data(dir='/home/iwsatlas1/peller/work/oscNext/level7_v01.04/140000_i3co
     repeated_params : ndarray
         shape (N_hits, len(labels))
     total_charge : ndarray
-        shape (N_events,)
+        shape (N_events, 2)
     params : ndarray
         shape (N_events, len(labels))
     """
