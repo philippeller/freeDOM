@@ -53,10 +53,7 @@ class LLH():
         n_points = params.shape[0]    
 
         # Charge Net
-        if type(event['total_charge']) == np.float:
-            inputs = [np.repeat(event['total_charge'], repeats=n_points)[:, np.newaxis], params]
-        else:
-            inputs = [np.array([event['total_charge'],]*n_points), params]
+        inputs = [np.repeat(event['total_charge'][np.newaxis, :], repeats=n_points, axis=0), params]
         score = self.chargenet.predict(inputs, batch_size=self.chargenet_batchsize)
         score = score[:, 0]
         score = np.clip(score, self.epsilon, 1-self.epsilon)
