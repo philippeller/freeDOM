@@ -160,7 +160,7 @@ class chargenet_trafo(tf.keras.layers.Layer):
         -----------
 
         charge : tensor
-            shape (N, 1), containing the event total charge
+            shape (N, 2), containing the event total charge and number of hit DOMs
 
         params : tensor
             shape (N, len(labels))
@@ -177,6 +177,7 @@ class chargenet_trafo(tf.keras.layers.Layer):
 
         out = tf.stack([
                  charge[:,0],
+                 charge[:,1], #n_channels
                  params[:, self.x_idx],
                  params[:, self.y_idx],
                  params[:, self.z_idx],
