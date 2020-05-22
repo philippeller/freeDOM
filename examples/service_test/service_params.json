@@ -1,9 +1,8 @@
 {
-    "req_addr": "ipc:///tmp/req1",
-    "ctrl_addr": "ipc:///tmp/ctrl1",
+    "req_addr": "tcp://127.0.0.1:12358",
+    "ctrl_addr": "tcp://127.0.0.1:12357",
     "poll_timeout": 1,
     "flush_period": 1,
-    "model_file": "gaussian_nn_2million.h5",
     "n_hypo_params": 8,
     "n_obs_features": 9,
     "batch_size" : {
@@ -13,8 +12,8 @@
     "send_hwm": 10000,
     "recv_hwm": 10000,
     "use_freeDOM_model": true,
-    "hitnet_file": "../resources/models/HitNet_logE18_May_2020-21h02/epoch_32_model.hdf5",
-    "chargenet_file": "../resources/models/ChargeNet_logE_18_May_2020-21h03/epoch_400_model.hdf5",
+    "hitnet_file": "HitNet_logE18_May_2020-21h02/epoch_32_model.hdf5",
+    "chargenet_file": "ChargeNet_logE_18_May_2020-21h03/epoch_400_model.hdf5",
     "router_mandatory": true,
     "bypass_tensorflow": false
 }

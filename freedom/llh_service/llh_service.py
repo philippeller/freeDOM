@@ -13,6 +13,7 @@ import json
 import os
 import time
 import sys
+import pkg_resources
 
 import numpy as np
 
@@ -119,6 +120,11 @@ class LLHService:
 
             self._eval_llh = eval_llh.eval_llh
         else:
+            if not os.path.exists(hitnet_file):
+                hitnet_file = f"{pkg_resources.resource_filename('freedom', 'resources/models')}/{hitnet_file}"
+            if not os.path.exists(chargenet_file):
+                chargenet_file = f"{pkg_resources.resource_filename('freedom', 'resources/models')}/{chargenet_file}"
+
             hitnet = tf.keras.models.load_model(
                 hitnet_file, custom_objects={"hitnet_trafo": hitnet_trafo}
             )
@@ -414,16 +420,3 @@ class LLHService:
             llh_slice = llhs[work_req["start_ind"] : work_req["stop_ind"]]
             frames = work_req["header_frames"] + [llh_slice]
             self._req_sock.send_multipart(frames)
-
-
-def main():
-    with open("service_params.json") as f:
-        params = json.load(f)
-
-    with LLHService(**params) as service:
-        wstdout("starting work loop:\n")
-        service.start_work_loop()
-
-
-if __name__ == "__main__":
-    sys.exit(main())

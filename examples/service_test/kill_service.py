@@ -9,6 +9,7 @@ from __future__ import absolute_import, division, print_function
 
 __author__ = "Aaron Fienberg"
 
+import argparse
 import json
 import sys
 
@@ -16,7 +17,15 @@ import zmq
 
 
 def main():
-    with open("service_params.json") as f:
+    parser = argparse.ArgumentParser(
+        description="Attempts to kill a running LLH service"
+    )
+    parser.add_argument(
+        "-c", "--conf_file", type=str, help="service configuration file", required=True
+    )
+    args = parser.parse_args()
+
+    with open(args.conf_file) as f:
         params = json.load(f)
 
     ctrl_sock = zmq.Context.instance().socket(zmq.REQ)
