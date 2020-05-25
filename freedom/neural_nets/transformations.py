@@ -42,7 +42,7 @@ class hitnet_trafo(tf.keras.layers.Layer):
         
         
     def get_config(self):
-        return {'labels': self.labels}
+        return {'labels': self.labels, 'max_energy': self.min_energy, 'max_energy': self.max_energy}
 
     def call(self, hit, params):
         '''
@@ -100,6 +100,7 @@ class hitnet_trafo(tf.keras.layers.Layer):
         out = tf.stack([
                  delta,
                  dist,
+                 #rho ?,
                  costhetadir,
                  absdeltaphidir,
                  dir_x,
@@ -123,6 +124,83 @@ class hitnet_trafo(tf.keras.layers.Layer):
             
         return out
     
+class stringnet_trafo(tf.keras.layers.Layer):
+    '''Class to transfor inputs for stringnet
+    '''
+    
+    def __init__(self, labels, min_energy=0.1, max_energy=1e4):
+        '''
+        Parameters:
+        -----------
+
+        labels : list
+            list of labels corresponding to the data array
+        '''
+        
+        super().__init__()
+
+        self.labels = labels
+        self.min_energy = min_energy
+        self.max_energy = max_energy
+        
+        self.azimuth_idx = labels.index('azimuth')
+        self.zenith_idx = labels.index('zenith')
+        self.x_idx = labels.index('x')
+        self.y_idx = labels.index('y')
+        self.z_idx = labels.index('z')
+        self.cascade_energy_idx = labels.index('cascade_energy')
+        self.track_energy_idx = labels.index('track_energy')
+        
+    def get_config(self):
+        return {'labels': self.labels, 'max_energy': self.min_energy, 'max_energy': self.max_energy}
+
+    def call(self, string, params):
+        '''
+        Parameters:
+        -----------
+
+        string : tensor
+            shape (N, 5), containing hit string position x, y, min(z), charge, and string_idx
+
+        params : tensor
+            shape (N, len(labels))
+
+        '''
+        
+        dir_x = tf.math.sin(params[:, self.zenith_idx]) * tf.math.cos(params[:, self.azimuth_idx])
+        dir_y = tf.math.sin(params[:, self.zenith_idx]) * tf.math.sin(params[:, self.azimuth_idx])
+        dir_z = tf.math.cos(params[:, self.zenith_idx])
+        
+        dx = params[:, self.x_idx] - string[:,0]
+        dy = params[:, self.y_idx] - string[:,1]
+        dz = params[:, self.z_idx] - string[:,2]
+        
+        # distance string - vertex
+        rho = tf.math.sqrt(tf.math.square(dx) + tf.math.square(dy))
+
+        cascade_energy = tf.math.log(tf.clip_by_value(params[:, self.cascade_energy_idx], self.min_energy, self.max_energy))
+        track_energy = tf.math.log(tf.clip_by_value(params[:, self.track_energy_idx], self.min_energy, self.max_energy))
+        
+        out = tf.stack([
+                 string[:,0],
+                 string[:,1],
+                 string[:,2],
+                 string[:,3],
+                 string[:,4],
+                 rho,
+                 dir_x,
+                 dir_y,
+                 dir_z,
+                 dx,
+                 dy,
+                 dz,
+                 cascade_energy,
+                 track_energy
+                ],
+                axis=1
+                )    
+            
+        return out
     
 class chargenet_trafo(tf.keras.layers.Layer):
     '''Class to transfor inputs for Charget Net
@@ -152,7 +230,7 @@ class chargenet_trafo(tf.keras.layers.Layer):
         self.track_energy_idx = labels.index('track_energy')
         
     def get_config(self):
-        return {'labels': self.labels}
+        return {'labels': self.labels, 'max_energy': self.min_energy, 'max_energy': self.max_energy}
     
     def call(self, charge, params):
         '''

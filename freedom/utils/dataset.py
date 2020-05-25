@@ -2,7 +2,7 @@
 import pkg_resources
 import numpy as np
 import tensorflow as tf
-from freedom.utils.i3cols_dataloader import load_data
+from freedom.utils.i3cols_dataloader import load_hits, load_charges, load_strings
 from sklearn.model_selection import train_test_split
 
 
@@ -13,20 +13,21 @@ class Data():
                  geo=pkg_resources.resource_filename('freedom', 'resources/geo_array.npy'),
                 ):
         
-        data = []
-        for dir in dirs:
-            data.append(load_data(dir=dir, labels=labels, geo=geo))
-        
-        self.single_hits = np.concatenate([d[0] for d in data])
-        self.repeated_params = np.concatenate([d[1] for d in data])
-        self.total_charge = np.concatenate([d[2] for d in data])
-        self.params = np.concatenate([d[3] for d in data])
-        self.labels = data[0][4]
-        
-    
+
+        self.dirs = dirs
+        self.labels = labels
+        self.geo = geo
+
     def get_hitnet_data(self, train_batch_size=1024, test_batch_size=256, test_size=0.01, random_state=42):
-        hits_train, hits_test, params_train, params_test = train_test_split(self.single_hits,
-                                                                            self.repeated_params,
+
+        data = []
+        for dir in self.dirs:
+            data.append(load_hits(dir=dir, labels=self.labels, geo=self.geo))
+        single_hits = np.concatenate([d[0] for d in data])
+        repeated_params = np.concatenate([d[1] for d in data])
+        
+        hits_train, hits_test, params_train, params_test = train_test_split(single_hits,
+                                                                            repeated_params,
                                                                             test_size=test_size,
                                                                             random_state=random_state)
         
@@ -37,8 +38,15 @@ class Data():
         
         
     def get_chargenet_data(self, train_batch_size=1024, test_batch_size=256, test_size=0.01, random_state=42):
-        charge_train, charge_test, params_train, params_test = train_test_split(self.total_charge,
-                                                                                self.params, 
+
+        data = []
+        for dir in self.dirs:
+            data.append(load_charges(dir=dir, labels=self.labels))
+        total_charge = np.concatenate([d[0] for d in data])
+        params = np.concatenate([d[1] for d in data])
+
+        charge_train, charge_test, params_train, params_test = train_test_split(total_charge,
+                                                                                params, 
                                                                                 test_size=test_size,
                                                                                 random_state=random_state)
         
@@ -47,6 +55,23 @@ class Data():
         
         return train, test
         
+    def get_stringnet_data(self, train_batch_size=1024, test_batch_size=256, test_size=0.01, random_state=42):
+
+        data = []
+        for dir in self.dirs:
+            data.append(load_strings(dir=dir, labels=self.labels))
+        string_charges = np.concatenate([d[0] for d in data])
+        params = np.concatenate([d[1] for d in data])
+
+        string_train, string_test, params_train, params_test = train_test_split(string_charges,
+                                                                                params, 
+                                                                                test_size=test_size,
+                                                                                random_state=random_state)
+        
+        train = self.get_dataset(string_train, params_train, batch_size=train_batch_size)
+        test = self.get_dataset(string_test, params_test, batch_size=test_batch_size, test=True)
+        
+        return train, test
         
         
     def get_dataset(self, x, p, batch_size=1024, test=False):
