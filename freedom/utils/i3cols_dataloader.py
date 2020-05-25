@@ -41,6 +41,7 @@ def get_params(labels, mcprimary, mctree, mctree_idx, dtype=np.float32):
 
     neutrino_energy, track_energy, cascade_energy = get_energies(mcprimary, mctree, mctree_idx, dtype=dtype)
     
+<<<<<<< HEAD
     params = np.empty(mcprimary.shape + (len(labels), ), dtype=dtype)
 
     for i, label in enumerate(labels):
@@ -68,7 +69,7 @@ def load_charges(dir='/home/iwsatlas1/peller/work/oscNext/level7_v01.04/140000_i
     Returns:
     --------
     total_charge : ndarray
-        shape (N_events,)
+        shape (N_events, 2)
     params : ndarray
         shape (N_events, len(labels))
     labels
@@ -81,11 +82,13 @@ def load_charges(dir='/home/iwsatlas1/peller/work/oscNext/level7_v01.04/140000_i
     mcprimary = np.load(os.path.join(dir, 'MCInIcePrimary/data.npy'))
 
     # Get charge per event
-    total_charge = np.zeros(hits_idx.shape, dtype=dtype)
+    total_charge = np.zeros((hits_idx.shape[0], 2), dtype=dtype)
     for i in range(len(hits_idx)):
         this_idx = hits_idx[i]
         this_hits = hits[this_idx['start'] : this_idx['stop']]
-        total_charge[i] = np.sum(this_hits['pulse']['charge'])
+
+        total_charge[i][0] = np.sum(this_hits['pulse']['charge'])
+        total_charge[i][1] = len(np.unique(this_hits['key']))
         
     params = get_params(labels, mcprimary, mctree, mctree_idx)
     return total_charge, params, labels
