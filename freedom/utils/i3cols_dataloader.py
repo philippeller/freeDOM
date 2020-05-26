@@ -41,7 +41,6 @@ def get_params(labels, mcprimary, mctree, mctree_idx, dtype=np.float32):
 
     neutrino_energy, track_energy, cascade_energy = get_energies(mcprimary, mctree, mctree_idx, dtype=dtype)
     
-<<<<<<< HEAD
     params = np.empty(mcprimary.shape + (len(labels), ), dtype=dtype)
 
     for i, label in enumerate(labels):
