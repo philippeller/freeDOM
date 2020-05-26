@@ -7,7 +7,7 @@ class LLH():
     def __init__(self,
                  hitnet_file,
                  chargenet_file,
-                 epsilon = 1e-10,
+                 #psilon = 1e-10,
                  chargenet_batchsize = 4096,
                  hitnet_batchsize = 2**15,
                  ):
@@ -16,13 +16,17 @@ class LLH():
             location of HitNet model hdf5 file
         chargenet_file : str
             location of ChargeNet model hdf5 file
-        epsilon : float
-            value to clip discriminator output at to avoid division by zero
         chargenet_batchsize : int
         hitnet_batchsize : int
         '''
         self.hitnet = tf.keras.models.load_model(hitnet_file, custom_objects={'hitnet_trafo':hitnet_trafo})
         self.chargenet = tf.keras.models.load_model(chargenet_file, custom_objects={'chargenet_trafo':chargenet_trafo})
+        
+        # set to linear output = logit
+        self.hitnet.layers[-1].activation = tf.keras.activations.linear
+        self.hitnet.compile()
+        self.chargenet.layers[-1].activation = tf.keras.activations.linear
+        self.chargenet.compile()
         
         self.epsilon = epsilon
         self.chargenet_batchsize = chargenet_batchsize
@@ -54,10 +58,7 @@ class LLH():
 
         # Charge Net
         inputs = [np.repeat(event['total_charge'][np.newaxis, :], repeats=n_points, axis=0), params]
-        score = self.chargenet.predict(inputs, batch_size=self.chargenet_batchsize)
-        score = score[:, 0]
-        score = np.clip(score, self.epsilon, 1-self.epsilon)
-        charge_llh = -(np.log(score) - np.log(1 - score))
+        charge_llh = -self.chargenet.predict(inputs, batch_size=self.chargenet_batchsize)[:, 0]
 
         # Hit Net
         hits = event['hits']
@@ -70,10 +71,7 @@ class LLH():
             inputs.append(np.repeat(hits[:, np.newaxis, :], repeats=n_points, axis=1).reshape(n_hits * n_points, -1))
             inputs.append(np.repeat(params[np.newaxis, :], repeats=n_hits, axis=0).reshape(n_hits * n_points, -1))
 
-            score = self.hitnet.predict(inputs, batch_size=self.hitnet_batchsize)
-            score = score.reshape(n_hits, n_points)
-            score = np.clip(score, self.epsilon, 1-self.epsilon)
-            single_hit_llhs = -(np.log(score) - np.log(1 - score))
+            single_hit_llhs = -self.hitnet.predict(inputs, batch_size=self.hitnet_batchsize).reshape(n_hits, n_points)
 
             all_hits_llh = hit_charges @ single_hit_llhs
 
