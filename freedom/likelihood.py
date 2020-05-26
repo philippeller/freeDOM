@@ -28,7 +28,6 @@ class LLH():
         self.chargenet.layers[-1].activation = tf.keras.activations.linear
         self.chargenet.compile()
         
-        self.epsilon = epsilon
         self.chargenet_batchsize = chargenet_batchsize
         self.hitnet_batchsize = hitnet_batchsize
         
