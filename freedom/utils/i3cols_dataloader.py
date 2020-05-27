@@ -32,65 +32,12 @@ def get_energies(mcprimary, mctree, mctree_idx, dtype=np.float32):
     cascade_energy = neutrino_energy - track_energy - invisible_energy
     return neutrino_energy, track_energy, cascade_energy
 
-def get_total_charge(hits, hits_idx, dtype=np.float32):
-    '''Get charge per event'''
-    
-    total_charge = np.zeros((hits_idx.shape[0], 2), dtype=dtype)
-    
-    for i in range(len(hits_idx)):
-        this_idx = hits_idx[i]
-        this_hits = hits[this_idx['start'] : this_idx['stop']]
+def get_params(labels, mcprimary, mctree, mctree_idx, dtype=np.float32):
+    '''construct params array
 
-        total_charge[i][0] = np.sum(this_hits['pulse']['charge'])
-        total_charge[i][1] = len(np.unique(this_hits['key']))
-        
-    return total_charge
-
-def load_data(dir='/home/iwsatlas1/peller/work/oscNext/level7_v01.04/140000_i3cols',
-              labels=['x', 'y', 'z', 'time', 'azimuth','zenith', 'cascade_energy', 'track_energy'],
-              geo=pkg_resources.resource_filename('freedom', 'resources/geo_array.npy'),
-              dtype=np.float32):
-    """
-    Create training data for hit and charge net
-    
-    Returns:
-    --------
-    single_hits : ndarray
-        shape (N_hits, 9)
-    repeated_params : ndarray
-        shape (N_hits, len(labels))
-    total_charge : ndarray
-        shape (N_events, 2)
-    params : ndarray
-        shape (N_events, len(labels))
-    """
-    
-    hits_idx = np.load(os.path.join(dir, 'SRTTWOfflinePulsesDC/index.npy'))
-    hits = np.load(os.path.join(dir, 'SRTTWOfflinePulsesDC/data.npy'))
-    mctree_idx = np.load(os.path.join(dir, 'I3MCTree/index.npy'))
-    mctree = np.load(os.path.join(dir, 'I3MCTree/data.npy'))
-    mcprimary = np.load(os.path.join(dir, 'MCInIcePrimary/data.npy'))
-
-    geo = np.load(geo)
-    
-    # constrcut hits array
-    
-    # shape N x (x, y, z, t, q)
-    single_hits = np.empty(hits.shape + (9,), dtype=dtype)
-    string_idx = hits['key']['string'] - 1
-    om_idx = hits['key']['om'] - 1
-
-    single_hits[:, 0:3] = geo[string_idx, om_idx]
-    single_hits[:, 3] = hits['pulse']['time']
-    single_hits[:, 4] = hits['pulse']['charge']
-    single_hits[:, 5] = hits['pulse']['flags'] & 1 # is LC or not?
-    single_hits[:, 6] = (hits['pulse']['flags'] & 2) / 2 # has ATWD or not?
-    single_hits[:, 7] = string_idx
-    single_hits[:, 8] = om_idx
-    
-    total_charge = get_total_charge(hits, hits_idx, dtype=dtype)
-    
-    # construct params array
+    retruns:
+    params : array shape (len(mcprimary), len(labels))
+    '''
 
     neutrino_energy, track_energy, cascade_energy = get_energies(mcprimary, mctree, mctree_idx, dtype=dtype)
     
@@ -108,11 +55,137 @@ def load_data(dir='/home/iwsatlas1/peller/work/oscNext/level7_v01.04/140000_i3co
         elif label == 'cascade_energy': params[:, i] = cascade_energy
         elif label == 'track_energy': params[:, i] = track_energy
 
+    return params
+
+
+
+def load_charges(dir='/home/iwsatlas1/peller/work/oscNext/level7_v01.04/140000_i3cols',
+                 labels=['x', 'y', 'z', 'time', 'azimuth','zenith', 'cascade_energy', 'track_energy'],
+                 dtype=np.float32):
+    """
+    Create training data for chargenet
+    
+    Returns:
+    --------
+    total_charge : ndarray
+        shape (N_events, 2)
+    params : ndarray
+        shape (N_events, len(labels))
+    labels
+    """
+    
+    hits_idx = np.load(os.path.join(dir, 'SRTTWOfflinePulsesDC/index.npy'))
+    hits = np.load(os.path.join(dir, 'SRTTWOfflinePulsesDC/data.npy'))
+    mctree_idx = np.load(os.path.join(dir, 'I3MCTree/index.npy'))
+    mctree = np.load(os.path.join(dir, 'I3MCTree/data.npy'))
+    mcprimary = np.load(os.path.join(dir, 'MCInIcePrimary/data.npy'))
+
+    # Get charge per event
+    total_charge = np.zeros((hits_idx.shape[0], 2), dtype=dtype)
+    for i in range(len(hits_idx)):
+        this_idx = hits_idx[i]
+        this_hits = hits[this_idx['start'] : this_idx['stop']]
+
+        total_charge[i][0] = np.sum(this_hits['pulse']['charge'])
+        total_charge[i][1] = len(np.unique(this_hits['key']))
+        
+    params = get_params(labels, mcprimary, mctree, mctree_idx)
+    return total_charge, params, labels
+
+def load_strings(dir='/home/iwsatlas1/peller/work/oscNext/level7_v01.04/140000_i3cols',
+                 labels=['x', 'y', 'z', 'time', 'azimuth','zenith', 'cascade_energy', 'track_energy'],
+                 geo=pkg_resources.resource_filename('freedom', 'resources/geo_array.npy'),
+                 dtype=np.float32):
+    """
+    Create training data for hitnet
+    
+    Returns:
+    --------
+    string_charges : ndarray
+        shape (N_events*86, 5)
+    repeated_params : ndarray
+        shape (N_events*86, len(labels))
+    labels
+    """
+    
+    hits_idx = np.load(os.path.join(dir, 'SRTTWOfflinePulsesDC/index.npy'))
+    hits = np.load(os.path.join(dir, 'SRTTWOfflinePulsesDC/data.npy'))
+    mctree_idx = np.load(os.path.join(dir, 'I3MCTree/index.npy'))
+    mctree = np.load(os.path.join(dir, 'I3MCTree/data.npy'))
+    mcprimary = np.load(os.path.join(dir, 'MCInIcePrimary/data.npy'))
+
+    geo = np.load(geo)
+    
+    # constrcut strings array
+    # shape N x 86 x (x, y, min(z), q, string_idx)
+    
+    strings = np.zeros(hits_idx.shape + (86, 5,), dtype=dtype)
+    strings[:, :, 0:3] = geo[np.newaxis, :, -1]
+    strings[:, :, 4] = np.arange(86)[np.newaxis, :]
+
+    # Get charge per event and string
+    for i in range(len(hits_idx)):
+        this_idx = hits_idx[i]
+        this_hits = hits[this_idx['start'] : this_idx['stop']]
+        for hit in this_hits:
+            s_idx = hit['key']['string'] - 1
+            strings[i, s_idx, 3] += hit['pulse']['charge'] 
+
+    strings = strings.reshape(-1, 5)
+    
+    params = get_params(labels, mcprimary, mctree, mctree_idx)
+
+    repeated_params = np.repeat(params, repeats=86, axis=0)
+    
+    return strings, repeated_params, labels
+
+
+def load_hits(dir='/home/iwsatlas1/peller/work/oscNext/level7_v01.04/140000_i3cols',
+              labels=['x', 'y', 'z', 'time', 'azimuth','zenith', 'cascade_energy', 'track_energy'],
+              geo=pkg_resources.resource_filename('freedom', 'resources/geo_array.npy'),
+              dtype=np.float32):
+    """
+    Create training data for hitnet
+    
+    Returns:
+    --------
+    single_hits : ndarray
+        shape (N_hits, 9)
+    repeated_params : ndarray
+        shape (N_hits, len(labels))
+    labels
+    """
+    
+    hits_idx = np.load(os.path.join(dir, 'SRTTWOfflinePulsesDC/index.npy'))
+    hits = np.load(os.path.join(dir, 'SRTTWOfflinePulsesDC/data.npy'))
+    mctree_idx = np.load(os.path.join(dir, 'I3MCTree/index.npy'))
+    mctree = np.load(os.path.join(dir, 'I3MCTree/data.npy'))
+    mcprimary = np.load(os.path.join(dir, 'MCInIcePrimary/data.npy'))
+
+    geo = np.load(geo)
+    
+    # constrcut hits array
+    
+    # shape N x (x, y, z, t, q, ...)
+    single_hits = np.empty(hits.shape + (9,), dtype=dtype)
+    string_idx = hits['key']['string'] - 1
+    om_idx = hits['key']['om'] - 1
+
+    single_hits[:, 0:3] = geo[string_idx, om_idx]
+    single_hits[:, 3] = hits['pulse']['time']
+    single_hits[:, 4] = hits['pulse']['charge']
+    single_hits[:, 5] = hits['pulse']['flags'] & 1 # is LC or not?
+    single_hits[:, 6] = (hits['pulse']['flags'] & 2) / 2 # has ATWD or not?
+    single_hits[:, 7] = string_idx
+    single_hits[:, 8] = om_idx
+    
+    params = get_params(labels, mcprimary, mctree, mctree_idx)
+
     repeats = (hits_idx['stop'] - hits_idx['start']).astype(np.int64)
     repeated_params = np.repeat(params, repeats=repeats, axis=0)
 
     
-    return single_hits, repeated_params, total_charge, params, labels
+    return single_hits, repeated_params, labels
 
 def load_events(dir='/home/iwsatlas1/peller/work/oscNext/level7_v01.04/140000_i3cols',
               labels=['x', 'y', 'z', 'time', 'azimuth','zenith', 'cascade_energy', 'track_energy'],
@@ -135,7 +208,13 @@ def load_events(dir='/home/iwsatlas1/peller/work/oscNext/level7_v01.04/140000_i3
     
     hits_idx = np.load(os.path.join(dir, 'SRTTWOfflinePulsesDC/index.npy'))
     
-    single_hits, repeated_params, total_charge, params, labels = load_data(dir=dir, labels=labels, geo=geo, dtype=dtype)
+    single_hits, repeated_params, labels = load_hits(dir=dir, labels=labels, geo=geo, dtype=dtype)
+
+    total_charge, params, labels = load_charges(dir=dir, labels=labels, dtype=dtype)
+
+    string_charges, _, _ = load_strings(dir=dir, labels=labels, geo=geo, dtype=dtype)
+
+    string_charges = string_charges.reshape(len(total_charge), 86, -1)
 
     reco_params = {}
     for r,f in recos.items():
@@ -170,6 +249,7 @@ def load_events(dir='/home/iwsatlas1/peller/work/oscNext/level7_v01.04/140000_i3
         event['total_charge'] = total_charge[i]
         event['hits'] = single_hits[hits_idx[i]['start'] : hits_idx[i]['stop']]
         event['params'] = params[i]
+        event['strings'] = string_charges[i]
         for r in recos.keys():
             event[r] = reco_params[r][i]
         events.append(event)
