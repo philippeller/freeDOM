@@ -1,6 +1,6 @@
-import sys
+import sys, os
 if 'pytest' in sys.argv[0]:
-    sys.exit()
+    os._exit(0)
 import numpy as np
 from retro import init_obj
 from retro.retro_types import EVT_DOM_INFO_T, EVT_HIT_INFO_T, FitStatus
