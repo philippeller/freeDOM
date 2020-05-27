@@ -102,7 +102,7 @@ def load_strings(dir='/home/iwsatlas1/peller/work/oscNext/level7_v01.04/140000_i
     Returns:
     --------
     string_charges : ndarray
-        shape (N_events*86, 9)
+        shape (N_events*86, 5)
     repeated_params : ndarray
         shape (N_events*86, len(labels))
     labels
@@ -209,7 +209,12 @@ def load_events(dir='/home/iwsatlas1/peller/work/oscNext/level7_v01.04/140000_i3
     hits_idx = np.load(os.path.join(dir, 'SRTTWOfflinePulsesDC/index.npy'))
     
     single_hits, repeated_params, labels = load_hits(dir=dir, labels=labels, geo=geo, dtype=dtype)
+
     total_charge, params, labels = load_charges(dir=dir, labels=labels, dtype=dtype)
+
+    string_charges, _, _ = load_strings(dir=dir, labels=labels, geo=geo, dtype=dtype)
+
+    string_charges = string_charges.reshape(len(total_charge), 86, -1)
 
     reco_params = {}
     for r,f in recos.items():
@@ -244,6 +249,7 @@ def load_events(dir='/home/iwsatlas1/peller/work/oscNext/level7_v01.04/140000_i3
         event['total_charge'] = total_charge[i]
         event['hits'] = single_hits[hits_idx[i]['start'] : hits_idx[i]['stop']]
         event['params'] = params[i]
+        event['strings'] = string_charges[i]
         for r in recos.keys():
             event[r] = reco_params[r][i]
         events.append(event)
