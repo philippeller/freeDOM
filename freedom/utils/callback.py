@@ -28,6 +28,8 @@ class Save(tf.keras.callbacks.Callback):
         self.hist = {}
         self.hist['train_losses'] = []
         self.hist['test_losses'] = []
+        self.hist['train_accuracies'] = []
+        self.hist['test_accuracies'] = []
         self.hist['time'] = []
         if self.batch_stats:
             self.hist['mean_train_losses'] = []
@@ -52,6 +54,8 @@ class Save(tf.keras.callbacks.Callback):
         epoch_end_t = time()
         self.hist['train_losses'].append(logs.get('loss'))
         self.hist['test_losses'].append(logs.get('val_loss'))
+        self.hist['train_accuracies'].append(logs.get('accuracy'))
+        self.hist['test_accuracies'].append(logs.get('val_accuracy'))
         self.hist['time'].append((epoch_end_t - self.epoch_start_t) * 1000)
 
         if self.batch_stats:
