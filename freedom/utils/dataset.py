@@ -172,7 +172,20 @@ class DataGenerator(tf.keras.utils.Sequence):
         return int(np.floor(len(self.data) / self.batch_size))
 
     def __getitem__(self, index):
-        'Generate one batch of data'
+        '''
+        Generate one batch of data
+        
+        Parameters:
+        -----------
+        index : int
+                batch index (between 0 and len(DataGenerator))
+                
+        Returns:
+        --------
+        X : list of two arrays of length batch_size ([observations, params])
+        y : array of length batch_size (labels)
+        '''
+        
         # Generate indexes of the batch
         indexes = self.indexes[index*self.batch_size:(index+1)*self.batch_size]
 
