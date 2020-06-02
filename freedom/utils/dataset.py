@@ -175,15 +175,17 @@ class DataGenerator(tf.keras.utils.Sequence):
         '''
         Generate one batch of data
         
-        Parameters:
+        Parameters
         -----------
         index : int
-                batch index (between 0 and len(DataGenerator))
-                
-        Returns:
+            batch index (between 0 and len(DataGenerator))
+        
+        Returns
         --------
-        X : list of two arrays of length batch_size ([observations, params])
-        y : array of length batch_size (labels)
+        X : list 
+            the NN input, contains two arrays of length batch_size [observations, params]
+        y : array 
+            the output the NN should give, has length batch_size
         '''
         
         # Generate indexes of the batch
