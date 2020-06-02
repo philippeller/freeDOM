@@ -1,4 +1,4 @@
-"""Module to create tf.data.DataSet instances for training"""
+"""Module to create tf.data.DataSet and DataGenerator instances for training"""
 import pkg_resources
 import numpy as np
 import tensorflow as tf
@@ -145,3 +145,82 @@ class Data():
 #         prefetched = batched.prefetch(1)
         
 #         return prefetched
+
+
+class DataGenerator(tf.keras.utils.Sequence):
+    def __init__(self, 
+                 func, # e.g. load_charges
+                 dirs=['/home/iwsatlas1/peller/work/oscNext/level7_v01.04/140000_i3cols'], 
+                 labels=['x', 'y', 'z', 'time', 'azimuth','zenith', 'cascade_energy', 'track_energy'], 
+                 batch_size=4096):
+        
+        self.batch_size = int(batch_size/2) # half true labels half false labels
+        self.labels = labels
+        for i, dir in enumerate(dirs):
+            data, params, _ = func(dir=dir, labels=labels)
+            if i == 0:
+                self.data = data
+                self.params = params
+            else:
+                self.data = np.append(self.data, data, axis=0)
+                self.params = np.append(self.params, params, axis=0)
+        
+        self.on_epoch_end()
+
+    def __len__(self):
+        'Denotes the number of batches per epoch'
+        return int(np.floor(len(self.data) / self.batch_size))
+
+    def __getitem__(self, index):
+        '''
+        Generate one batch of data
+        
+        Parameters
+        -----------
+        index : int
+            batch index (between 0 and len(DataGenerator))
+        
+        Returns
+        --------
+        X : list 
+            the NN input, contains two arrays of length batch_size [observations, params]
+        y : array 
+            the output the NN should give, has length batch_size
+        '''
+        
+        # Generate indexes of the batch
+        indexes = self.indexes[index*self.batch_size:(index+1)*self.batch_size]
+
+        # Generate data
+        X, y = self.__data_generation(indexes)
+
+        return X, y
+
+    def on_epoch_end(self):
+        'Updates indexes after each epoch'
+        self.indexes = np.arange(len(self.data))
+        np.random.shuffle(self.indexes) # mix between batches
+
+    def __data_generation(self, indexes_temp):
+        'Generates data containing batch_size samples'
+        # Generate data similar to Data.get_dataset()
+        x = np.take(self.data, indexes_temp, axis=0)
+        t = np.take(self.params, indexes_temp, axis=0)
+
+        d_true_labels = np.ones((self.batch_size, 1), dtype=x.dtype)
+        d_false_labels = np.zeros((self.batch_size, 1), dtype=x.dtype)
+        d_labels = np.append(d_true_labels, d_false_labels)
+
+        d_X = np.append(x, x, axis=0)
+        d_T = np.append(t, np.random.permutation(t), axis=0)
+        
+        d_X, d_T, d_labels = self.unison_shuffled_copies(d_X, d_T, d_labels)
+
+        return [d_X, d_T], d_labels
+    
+    def unison_shuffled_copies(self, a, b, c):
+        'Shuffles arrays in the same way'
+        assert len(a) == len(b) == len(c)
+        p = np.random.permutation(len(a))
+        
+        return a[p], b[p], c[p]
