@@ -6,13 +6,16 @@ import tensorflow as tf
 
 # working freeDOM nllh
 @tf.function
-def freedom_nllh(x, theta, stop_inds, models, charge_ind=4):
+def freedom_nllh(hit_data, evt_data, theta, stop_inds, models, charge_ind=4):
     """
+    hitnet/chargenet llh calculation
+
     Parameters
      ----------
-    x: hits (charge is in column 4)
+    hit_data: table of hit data 
+    evt_data: table of event level data (currently total charge and n hit doms)
     theta: hypothesis params
-    stop_inds: last index of each separate event in the input
+    stop_inds: last index of each separate event in the hit_data table
     models: (hitnet, chargenet)
     """
 
@@ -22,24 +25,29 @@ def freedom_nllh(x, theta, stop_inds, models, charge_ind=4):
     # calculate n observations per LLH
     # ensure that sum(n_obs) == len(x) by
     # appending len(x) to the end of stop_inds
-    all_inds = tf.concat([[0], stop_inds, [len(x)]], axis=0)
+    all_inds = tf.concat([[0], stop_inds, [len(hit_data)]], axis=0)
     n_obs = all_inds[1:] - all_inds[:-1]
 
-    # handle zero-padding of dense_theta
+    # handle zero-padding of dense_theta & evt_data
     theta = tf.concat([theta, tf.zeros((1, theta.shape[1]), tf.float32)], axis=0)
+    evt_data = tf.concat(
+        [evt_data, tf.zeros((1, evt_data.shape[1]), tf.float32)], axis=0
+    )
     dense_theta = tf.repeat(theta, n_obs, axis=0)
 
     # charge net calculation
-    charge_splits = tf.split(x[:, charge_ind], n_obs)
-    total_charges = tf.stack([tf.reduce_sum(qs) for qs in charge_splits])[:, tf.newaxis]
-
-    charge_ds = chargenet([total_charges, theta])
-    charge_llhs = -tf.math.log(charge_ds / (1 - charge_ds))[:, -1]
+    # total_charges = tf.stack([tf.reduce_sum(qs) for qs in charge_splits])
+    # chargenet_features = tf.stack(
+    #     [total_charges, tf.cast(n_obs[: len(charge_splits)], tf.float32)], axis=1
+    # )
+    charge_llhs = -1 * chargenet([evt_data, theta])[:, -1]
 
     # hit net calculation
-    hit_ds = hitnet([x, dense_theta])
-    hit_llhs = -tf.math.log(hit_ds / (1 - hit_ds))
+    # hit_ds = hitnet([x, dense_theta])
+    # hit_llhs = -tf.math.log(hit_ds / (1 - hit_ds))
+    hit_llhs = -1 * hitnet([hit_data, dense_theta])
     hit_llh_splits = tf.split(hit_llhs, n_obs)
+    charge_splits = tf.split(hit_data[:, charge_ind], n_obs)
     hit_llh_sums = tf.stack(
         [
             tf.matmul(llh, charge_split[:, tf.newaxis], transpose_a=True)
@@ -57,7 +65,7 @@ def freedom_nllh(x, theta, stop_inds, models, charge_ind=4):
 
 
 @tf.function
-def eval_llh(x, theta, stop_inds, model):
+def eval_llh(x, evt_data, theta, stop_inds, model):
     # print("tracing eval_llh")
     # tf.print("executing eval_llh")
 
