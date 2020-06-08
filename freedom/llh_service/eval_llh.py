@@ -36,15 +36,9 @@ def freedom_nllh(hit_data, evt_data, theta, stop_inds, models, charge_ind=4):
     dense_theta = tf.repeat(theta, n_obs, axis=0)
 
     # charge net calculation
-    # total_charges = tf.stack([tf.reduce_sum(qs) for qs in charge_splits])
-    # chargenet_features = tf.stack(
-    #     [total_charges, tf.cast(n_obs[: len(charge_splits)], tf.float32)], axis=1
-    # )
     charge_llhs = -1 * chargenet([evt_data, theta])[:, -1]
 
     # hit net calculation
-    # hit_ds = hitnet([x, dense_theta])
-    # hit_llhs = -tf.math.log(hit_ds / (1 - hit_ds))
     hit_llhs = -1 * hitnet([hit_data, dense_theta])
     hit_llh_splits = tf.split(hit_llhs, n_obs)
     charge_splits = tf.split(hit_data[:, charge_ind], n_obs)
