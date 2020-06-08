@@ -12,11 +12,16 @@ def freedom_nllh(hit_data, evt_data, theta, stop_inds, models, charge_ind=4):
 
     Parameters
      ----------
-    hit_data: table of hit data 
-    evt_data: table of event level data (currently total charge and n hit doms)
-    theta: hypothesis params
-    stop_inds: last index of each separate event in the hit_data table
-    models: (hitnet, chargenet)
+    hit_data: tf.constant
+        table of hit data 
+    evt_data: tf.constant
+        table of event level data (currently total charge and n hit doms)
+    theta: tf.constant
+        hypothesis params
+    stop_inds: tf.constant
+        last index of each separate event in the hit_data table
+    models: tuple or list or other indexable object
+        (hitnet, chargenet)
     """
 
     hitnet = models[0]
