@@ -22,7 +22,8 @@ class LLHClient:
         "_max_hypos_per_batch",
         "_max_obs_per_batch",
         "_n_hypo_params",
-        "_n_obs_features",
+        "_n_hit_features",
+        "_n_evt_features",
         "_sock",
     ]
 
@@ -47,7 +48,7 @@ class LLHClient:
     def max_hypos_per_batch(self):
         return self._max_hypos_per_batch
 
-    def request_eval(self, x, theta, req_id=""):
+    def request_eval(self, hit_data, evt_data, theta, req_id=""):
         """Asynchronous llh eval request
 
         Note: Batch sizes for asynchronous requests are currently limited to max_hypos_per_batch
@@ -57,16 +58,22 @@ class LLHClient:
 
         Parameters
         ----------
-        x : observations: numpy.ndarray, or something convertible to one  
-        theta: hypothesis params: numpy.ndarray, or something convertible to one 
+        hit_data : numpy.ndarray, or something convertible to one  
+            table of hit features
+        evt_data : numpy.ndarray, or something convertible to one  
+            event-level features
+        theta: numpy.ndarray, or something convertible to one 
+            hypothesis params
         req_id : optional
             Converted to str, and returned as such
 
         """
-        x, theta = self._prepare_and_check_buffers(x, theta)
+        hit_data, evt_data, theta = self._prepare_and_check_buffers(
+            hit_data, evt_data, theta
+        )
 
         n_hypos = theta.size / self._n_hypo_params
-        n_obs = x.size / self._n_obs_features
+        n_hits = hit_data.size / self._n_hit_features
 
         if n_hypos > self._max_hypos_per_batch:
             raise RuntimeError(
@@ -74,19 +81,19 @@ class LLHClient:
                 f"per req, but {n_hypos:.0f} were requested!"
             )
 
-        if n_obs * n_hypos > self._max_obs_per_batch:
+        if n_hits * n_hypos > self._max_obs_per_batch:
             raise RuntimeError(
                 f"Asynchronous requests are limited to {self._max_obs_per_batch} total pulses "
-                f"per req, but {n_obs*n_hypos:.0f} were requested!"
+                f"per req, but {n_hits*n_hypos:.0f} were requested!"
             )
 
         # send a req_id string for development and debugging
         req_id_bytes = str(req_id).encode()
 
         # self._sock.send_multipart([req_id_bytes, x, theta])
-        llh_cython.dispatch_request(self._sock, req_id_bytes, x, theta)
+        llh_cython.dispatch_request(self._sock, req_id_bytes, hit_data, evt_data, theta)
 
-    def eval_llh(self, x, theta, timeout=None):
+    def eval_llh(self, hit_data, evt_data, theta, timeout=None):
         """Synchronous llh evaluation, blocking until llh is ready.
 
         Batch size is unlimited for synchronous requests
@@ -96,10 +103,12 @@ class LLHClient:
 
         Parameters
         ----------
-        x : numpy.ndarray, or something convertible to one  
-            Observations
-        theta: numpy.ndarray, or something convertible to one  
-            Hypothesis parameters
+        hit_data : numpy.ndarray, or something convertible to one  
+            table of hit features
+        evt_data : numpy.ndarray, or something convertible to one  
+            event-level features
+        theta: numpy.ndarray, or something convertible to one 
+            hypothesis paramsrs
         timeout : int, optional
             Wait for a reply up to `timeout` milliseconds
 
@@ -109,26 +118,28 @@ class LLHClient:
             On reaching timeout or failure of internal message uuid check
         """
 
-        x, theta = self._prepare_and_check_buffers(x, theta)
+        hit_data, evt_data, theta = self._prepare_and_check_buffers(
+            hit_data, evt_data, theta
+        )
 
         n_hypos = theta.size / self._n_hypo_params
-        n_obs = x.size / self._n_obs_features
+        n_hits = hit_data.size / self._n_hit_features
 
         # split into multiple requests if necessary
         if (
             n_hypos > self._max_hypos_per_batch
-            or n_obs * n_hypos > self._max_obs_per_batch
+            or n_hits * n_hypos > self._max_obs_per_batch
         ):
-            if n_obs > self._max_obs_per_batch:
+            if n_hits > self._max_obs_per_batch:
                 raise ValueError(
                     "Current LLH service only supports events with up to "
                     f"{self._max_obs_per_batch} pulses!"
                 )
 
-            if n_obs * self._max_hypos_per_batch <= self._max_obs_per_batch:
+            if n_hits * self._max_hypos_per_batch <= self._max_obs_per_batch:
                 hypos_per_split = self._max_hypos_per_batch
             else:
-                hypos_per_split = int(self._max_obs_per_batch / n_obs)
+                hypos_per_split = int(self._max_obs_per_batch / n_hits)
 
             split_step = hypos_per_split * self._n_hypo_params
 
@@ -144,7 +155,7 @@ class LLHClient:
             req_id = uuid.uuid4().hex
             req_ids.append(req_id)
 
-            self.request_eval(x, theta_split, req_id=req_id)
+            self.request_eval(hit_data, evt_data, theta_split, req_id=req_id)
 
         llhs = np.empty(int(n_hypos), dtype=np.float32)
         llh_view = llhs
@@ -192,21 +203,32 @@ class LLHClient:
         self._sock = sock
         self._sock.setsockopt(zmq.LINGER, 0)
 
-    def _init_from_conf(self, req_addr, batch_size, n_hypo_params, n_obs_features):
+    def _init_from_conf(
+        self, req_addr, batch_size, n_hypo_params, n_hit_features, n_evt_features
+    ):
         self._init_socket(req_addr)
         self._max_hypos_per_batch = batch_size["n_hypos"]
         self._max_obs_per_batch = batch_size["n_observations"]
         self._n_hypo_params = n_hypo_params
-        self._n_obs_features = n_obs_features
+        self._n_hit_features = n_hit_features
+        self._n_evt_features = n_evt_features
 
-    def _prepare_and_check_buffers(self, x, theta):
-        """ validates x & theta. Converts them to contiguous, flat arrays of type np.float32 if they are not already """
+    def _prepare_and_check_buffers(self, hit_data, evt_data, theta):
+        """ validates hit_data, evt_data, and theta. 
+        Converts them to contiguous, flat arrays of type np.float32 if they are not already """
 
-        x, theta = (self._as_flat_float_array(arr) for arr in (x, theta))
+        hit_data, evt_data, theta = (
+            self._as_flat_float_array(arr) for arr in (hit_data, evt_data, theta)
+        )
 
-        if x.size % self._n_obs_features != 0:
+        if hit_data.size % self._n_hit_features != 0:
             raise ValueError(
-                f"x.size must be divisible by the number of observation features ({self._n_obs_features})"
+                f"hit_data.size must be divisible by the number of observation features ({self._n_hit_features})"
+            )
+
+        if evt_data.size != self._n_evt_features:
+            raise ValueError(
+                f"evt_data.size must be equal to the number of event-level features ({self._n_evt_features})"
             )
 
         if theta.size % self._n_hypo_params != 0:
@@ -214,7 +236,7 @@ class LLHClient:
                 f"theta.size must be divisible by the number of hypothesis parameters ({self._n_hypo_params})"
             )
 
-        return x, theta
+        return hit_data, evt_data, theta
 
     @staticmethod
     def _as_flat_float_array(arr):
