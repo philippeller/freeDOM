@@ -160,7 +160,7 @@ class stringnet_trafo(tf.keras.layers.Layer):
         -----------
 
         string : tensor
-            shape (N, 5), containing hit string position x, y, min(z), charge, and string_idx
+            shape (N, 5), containing hit string position x, y, min(z), charge, and nChannels
 
         params : tensor
             shape (N, len(labels))
@@ -193,6 +193,77 @@ class stringnet_trafo(tf.keras.layers.Layer):
                  dir_z,
                  dx,
                  dy,
+                 dz,
+                 cascade_energy,
+                 track_energy
+                ],
+                axis=1
+                )    
+            
+        return out
+    
+class layernet_trafo(tf.keras.layers.Layer):
+    '''Class to transfor inputs for layernet
+    '''
+    
+    def __init__(self, labels, min_energy=0.1, max_energy=1e4):
+        '''
+        Parameters:
+        -----------
+
+        labels : list
+            list of labels corresponding to the data array
+        '''
+        
+        super().__init__()
+
+        self.labels = labels
+        self.min_energy = min_energy
+        self.max_energy = max_energy
+        
+        self.azimuth_idx = labels.index('azimuth')
+        self.zenith_idx = labels.index('zenith')
+        self.x_idx = labels.index('x')
+        self.y_idx = labels.index('y')
+        self.z_idx = labels.index('z')
+        self.cascade_energy_idx = labels.index('cascade_energy')
+        self.track_energy_idx = labels.index('track_energy')
+        
+    def get_config(self):
+        return {'labels': self.labels, 'max_energy': self.min_energy, 'max_energy': self.max_energy}
+
+    def call(self, layer, params):
+        '''
+        Parameters:
+        -----------
+
+        layer : tensor
+            shape (N, 4), containing hit layer nDOMs, z position, charge, and nChannels
+
+        params : tensor
+            shape (N, len(labels))
+
+        '''
+        
+        dir_x = tf.math.sin(params[:, self.zenith_idx]) * tf.math.cos(params[:, self.azimuth_idx])
+        dir_y = tf.math.sin(params[:, self.zenith_idx]) * tf.math.sin(params[:, self.azimuth_idx])
+        dir_z = tf.math.cos(params[:, self.zenith_idx])
+        
+        dz = params[:, self.z_idx] - layer[:,1]
+        
+        cascade_energy = tf.math.log(tf.clip_by_value(params[:, self.cascade_energy_idx], self.min_energy, self.max_energy))
+        track_energy = tf.math.log(tf.clip_by_value(params[:, self.track_energy_idx], self.min_energy, self.max_energy))
+        
+        out = tf.stack([
+                 layer[:,0],
+                 layer[:,1],
+                 layer[:,2],
+                 layer[:,3],
+                 dir_x,
+                 dir_y,
+                 dir_z,
+                 params[:, self.x_idx],
+                 params[:, self.y_idx],
                  dz,
                  cascade_energy,
                  track_energy

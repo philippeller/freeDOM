@@ -116,20 +116,21 @@ def load_strings(dir='/home/iwsatlas1/peller/work/oscNext/level7_v01.04/140000_i
 
     geo = np.load(geo)
     
-    # constrcut strings array
-    # shape N x 86 x (x, y, min(z), q, string_idx)
+    # construct strings array
+    # shape N x 86 x (x, y, min(z), q, nChannels)
     
     strings = np.zeros(hits_idx.shape + (86, 5,), dtype=dtype)
     strings[:, :, 0:3] = geo[np.newaxis, :, -1]
-    strings[:, :, 4] = np.arange(86)[np.newaxis, :]
 
     # Get charge per event and string
     for i in range(len(hits_idx)):
         this_idx = hits_idx[i]
         this_hits = hits[this_idx['start'] : this_idx['stop']]
-        for hit in this_hits:
+        for j, hit in enumerate(this_hits):
             s_idx = hit['key']['string'] - 1
-            strings[i, s_idx, 3] += hit['pulse']['charge'] 
+            strings[i, s_idx, 3] += hit['pulse']['charge']
+            if j == 0 or hit['key'] != this_hits[j-1]['key']: # assuming hits are sorted by DOMs
+                strings[i, s_idx, 4] += 1
 
     strings = strings.reshape(-1, 5)
     
@@ -138,6 +139,60 @@ def load_strings(dir='/home/iwsatlas1/peller/work/oscNext/level7_v01.04/140000_i
     repeated_params = np.repeat(params, repeats=86, axis=0)
     
     return strings, repeated_params, labels
+
+
+def load_layers(dir='/home/iwsatlas1/peller/work/oscNext/level7_v01.04/140000_i3cols',
+                labels=['x', 'y', 'z', 'time', 'azimuth','zenith', 'cascade_energy', 'track_energy'],
+                geo=pkg_resources.resource_filename('freedom', 'resources/geo_array.npy'),
+                dtype=np.float32,
+                n_layers=60):
+    """
+    Create training data for layernet
+    
+    Returns:
+    --------
+    layer_charges : ndarray
+        shape (N_events*n_layers, 4)
+    repeated_params : ndarray
+        shape (N_events*n_layers, len(labels))
+    labels
+    """
+    
+    hits_idx = np.load(os.path.join(dir, 'SRTTWOfflinePulsesDC/index.npy'))
+    hits = np.load(os.path.join(dir, 'SRTTWOfflinePulsesDC/data.npy'))
+    mctree_idx = np.load(os.path.join(dir, 'I3MCTree/index.npy'))
+    mctree = np.load(os.path.join(dir, 'I3MCTree/data.npy'))
+    mcprimary = np.load(os.path.join(dir, 'MCInIcePrimary/data.npy'))
+
+    geo = np.load(geo)
+    min_z, max_z = np.min(geo[:, : , 2]), np.max(geo[:, : , 2])
+    z_edges = np.linspace(min_z, max_z+1e-3, n_layers+1)
+    
+    # construct layers array
+    # shape N x n_layers x (nDOMs, z, q, nChannels)
+    
+    layers = np.zeros(hits_idx.shape + (n_layers, 4,), dtype=dtype)
+    layers[:, :, 0] = np.histogram(geo[:, : , 2].flatten(), z_edges)[0]
+    layers[:, :, 1] = (z_edges[:-1]+z_edges[1:])/2
+
+    # Get charge per event and layer
+    for i in range(len(hits_idx)):
+        this_idx = hits_idx[i]
+        this_hits = hits[this_idx['start'] : this_idx['stop']]
+        for j, hit in enumerate(this_hits):
+            z = geo[hit['key'][0]-1, hit['key'][1]-1, 2]
+            b = np.digitize(z, z_edges)-1
+            layers[i, b, 2] += hit['pulse']['charge']
+            if j == 0 or hit['key'] != this_hits[j-1]['key']: # assuming hits are sorted by DOMs
+                layers[i, b, 3] += 1
+
+    layers = layers.reshape(-1, 4)
+    
+    params = get_params(labels, mcprimary, mctree, mctree_idx)
+
+    repeated_params = np.repeat(params, repeats=n_layers, axis=0)
+    
+    return layers, repeated_params, labels
 
 
 def load_hits(dir='/home/iwsatlas1/peller/work/oscNext/level7_v01.04/140000_i3cols',
@@ -215,6 +270,10 @@ def load_events(dir='/home/iwsatlas1/peller/work/oscNext/level7_v01.04/140000_i3
     string_charges, _, _ = load_strings(dir=dir, labels=labels, geo=geo, dtype=dtype)
 
     string_charges = string_charges.reshape(len(total_charge), 86, -1)
+    
+    layer_charges, _, _ = load_layers(dir=dir, labels=labels, geo=geo, dtype=dtype, n_layers=60)
+
+    layer_charges = layer_charges.reshape(len(total_charge), 60, -1)
 
     reco_params = {}
     for r,f in recos.items():
@@ -250,6 +309,7 @@ def load_events(dir='/home/iwsatlas1/peller/work/oscNext/level7_v01.04/140000_i3
         event['hits'] = single_hits[hits_idx[i]['start'] : hits_idx[i]['stop']]
         event['params'] = params[i]
         event['strings'] = string_charges[i]
+        event['layers'] = layer_charges[i]
         for r in recos.keys():
             event[r] = reco_params[r][i]
         events.append(event)
