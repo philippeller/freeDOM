@@ -58,16 +58,29 @@ def freedom_nllh(hit_data, evt_data, theta, stop_inds, models, charge_ind=4):
     return hit_llh_sums[:, 0, 0] + charge_llhs
 
 
-def chargenet_from_stringnet(stringnet, n_params, n_strings=86, features_per_string=5):
-    """builds a "chargenet" model from stringnet that can be used in freedom_nllh
+def wrap_partial_chargenet(partialnet, n_params, n_groups, features_per_group):
+    """builds a "flat chargenet" model from a "partial chargenet" model
     
-    "chargenet" takes a flat array of event level features
-    In this case there are n_strings*features_per_string features per event
+    "flat chargenet" models take a flat array of event level features and output a single
+    LLH value per event. This is the format expected in the eval_llh.freedom_nnlh tf.function.
+
+    "partial chargenets" such as layernet and stringnet are fed a number of
+    groups of features per event, e.g. per-string features or per-layer features,
+    and the outputs for each group within an event must be summed to obtain an event-level LLH value.
+
+    This function wraps "partial chargenets" to create models presenting a "flat chargenet" interface.
     
     Parameters
     ----------
-    stringnet : tf.Keras.model
-        
+    partialnet : tf.Keras.model
+        currently either stringnet or layernet
+    n_params : int
+        number of hypothesis parameters
+    n_groups : int
+        number of strings for stringnet, number of layers for layernet
+    features_per_group : int
+        examples: 5 for stringnet, 4 for layernet
+
     Returns
     ----------
     tf.Keras.model
@@ -76,17 +89,17 @@ def chargenet_from_stringnet(stringnet, n_params, n_strings=86, features_per_str
     """
 
     param_inputs = tf.keras.Input(shape=(n_params,))
-    params_repeated = tf.repeat(param_inputs, n_strings, axis=0)
+    params_repeated = tf.repeat(param_inputs, n_groups, axis=0)
 
-    input_layer = tf.keras.Input(shape=(features_per_string * n_strings,))
+    input_layer = tf.keras.Input(shape=(features_per_group * n_groups,))
     reshaped_input = tf.reshape(
-        input_layer, (tf.shape(input_layer)[0] * n_strings, features_per_string)
+        input_layer, (tf.shape(input_layer)[0] * n_groups, features_per_group)
     )
 
-    string_llhs = stringnet([reshaped_input, params_repeated])
+    group_llhs = partialnet([reshaped_input, params_repeated])
 
     reshaped_llhs = tf.reshape(
-        string_llhs, (tf.shape(string_llhs)[0] // n_strings, n_strings)
+        group_llhs, (tf.shape(group_llhs)[0] // n_groups, n_groups)
     )
 
     sums = tf.reduce_sum(reshaped_llhs, axis=1)

@@ -87,7 +87,7 @@ class LLHService:
         send_hwm,
         recv_hwm,
         transform_params=None,
-        use_freeDOM_model=False,
+        use_freeDOM_model=True,
         model_file=None,
         hitnet_file=None,
         chargenet_file=None,
@@ -95,6 +95,10 @@ class LLHService:
         layernet_file=None,
         router_mandatory=False,
         bypass_tensorflow=False,
+        n_strings=86,
+        features_per_string=5,
+        n_layers=60,
+        features_per_layer=4,
     ):
         if (chargenet_file is None) + (stringnet_file is None) + (
             layernet_file is None
@@ -157,7 +161,9 @@ class LLHService:
                 )
                 stringnet.layers[-1].activation = tf.keras.activations.linear
 
-                chargenet = eval_llh.chargenet_from_stringnet(stringnet, n_hypo_params)
+                chargenet = eval_llh.wrap_partial_chargenet(
+                    stringnet, n_hypo_params, n_strings, features_per_string
+                )
 
             elif layernet_file is not None:
                 layernet_file = self._get_model_path(layernet_file)
@@ -166,7 +172,9 @@ class LLHService:
                 )
                 layernet.layers[-1].activation = tf.keras.activations.linear
 
-                chargenet = eval_llh.chargenet_from_layernet(layernet, n_hypo_params)
+                chargenet = eval_llh.wrap_partial_chargenet(
+                    layernet, n_hypo_params, n_layers, features_per_layer
+                )
 
             self._model = (hitnet, chargenet)
 
