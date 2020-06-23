@@ -22,6 +22,7 @@ import tensorflow as tf
 import zmq
 
 from freedom.neural_nets.transformations import chargenet_trafo, hitnet_trafo
+from freedom.neural_nets.transformations import stringnet_trafo, layernet_trafo
 from freedom.llh_service import llh_cython
 from freedom.llh_service import eval_llh
 
@@ -90,9 +91,18 @@ class LLHService:
         model_file=None,
         hitnet_file=None,
         chargenet_file=None,
+        stringnet_file=None,
+        layernet_file=None,
         router_mandatory=False,
         bypass_tensorflow=False,
     ):
+        if (chargenet_file is None) + (stringnet_file is None) + (
+            layernet_file is None
+        ) != 2:
+            raise RuntimeError(
+                "You must select exactly one of chargenet, stringnet, or layernet."
+            )
+
         self._work_reqs = []
 
         self._n_table_rows = batch_size["n_observations"]
@@ -127,22 +137,37 @@ class LLHService:
 
             self._eval_llh = eval_llh.eval_llh
         else:
-            if not os.path.exists(hitnet_file):
-                hitnet_file = f"{pkg_resources.resource_filename('freedom', 'resources/models')}/{hitnet_file}"
-            if not os.path.exists(chargenet_file):
-                chargenet_file = f"{pkg_resources.resource_filename('freedom', 'resources/models')}/{chargenet_file}"
-
+            hitnet_file = self._get_model_path(hitnet_file)
             hitnet = tf.keras.models.load_model(
                 hitnet_file, custom_objects={"hitnet_trafo": hitnet_trafo}
             )
-            chargenet = tf.keras.models.load_model(
-                chargenet_file, custom_objects={"chargenet_trafo": chargenet_trafo}
-            )
+            hitnet.layers[-1].activation = tf.keras.activations.linear
 
-            # remove activations to improve numerical stability
-            # (with sigmoid activation, ln(d/(1-d)) is equivalent to pre-activation d)
-            for model in hitnet, chargenet:
-                model.layers[-1].activation = tf.keras.activations.linear
+            if chargenet_file is not None:
+                chargenet_file = self._get_model_path(chargenet_file)
+                chargenet = tf.keras.models.load_model(
+                    chargenet_file, custom_objects={"chargenet_trafo": chargenet_trafo}
+                )
+                chargenet.layers[-1].activation = tf.keras.activations.linear
+
+            elif stringnet_file is not None:
+                print("stringnet")
+                stringnet_file = self._get_model_path(stringnet_file)
+                stringnet = tf.keras.models.load_model(
+                    stringnet_file, custom_objects={"stringnet_trafo": stringnet_trafo}
+                )
+                stringnet.layers[-1].activation = tf.keras.activations.linear
+
+                chargenet = eval_llh.chargenet_from_stringnet(stringnet, n_hypo_params)
+
+            elif layernet_file is not None:
+                layernet_file = self._get_model_path(layernet_file)
+                layernet = tf.keras.models.load_model(
+                    layernet_file, custom_objects={"layernet_trafo": layernet_trafo}
+                )
+                layernet.layers[-1].activation = tf.keras.activations.linear
+
+                chargenet = eval_llh.chargenet_from_layernet(layernet, n_hypo_params)
 
             self._model = (hitnet, chargenet)
 
@@ -452,3 +477,10 @@ class LLHService:
             llh_slice = llhs[work_req["start_ind"] : work_req["stop_ind"]]
             frames = work_req["header_frames"] + [llh_slice]
             self._req_sock.send_multipart(frames)
+
+    @staticmethod
+    def _get_model_path(filename):
+        if not os.path.exists(filename):
+            filename = f"{pkg_resources.resource_filename('freedom', 'resources/models')}/{filename}"
+
+        return filename

@@ -4,7 +4,7 @@ __author__ = "Aaron Fienberg"
 
 import tensorflow as tf
 
-# working freeDOM nllh
+
 @tf.function
 def freedom_nllh(hit_data, evt_data, theta, stop_inds, models, charge_ind=4):
     """
@@ -56,6 +56,45 @@ def freedom_nllh(hit_data, evt_data, theta, stop_inds, models, charge_ind=4):
 
     # combine hitnet and chargenet
     return hit_llh_sums[:, 0, 0] + charge_llhs
+
+
+def chargenet_from_stringnet(stringnet, n_params, n_strings=86, features_per_string=5):
+    """builds a "chargenet" model from stringnet that can be used in freedom_nllh
+    
+    "chargenet" takes a flat array of event level features
+    In this case there are n_strings*features_per_string features per event
+    
+    Parameters
+    ----------
+    stringnet : tf.Keras.model
+        
+    Returns
+    ----------
+    tf.Keras.model
+        A "chargenet-like" model that takes one fixed-size array of event level features per
+        event. This object should be usable as a chargenet in freedom_nllh
+    """
+
+    param_inputs = tf.keras.Input(shape=(n_params,))
+    params_repeated = tf.repeat(param_inputs, n_strings, axis=0)
+
+    input_layer = tf.keras.Input(shape=(features_per_string * n_strings,))
+    reshaped_input = tf.reshape(
+        input_layer, (tf.shape(input_layer)[0] * n_strings, features_per_string)
+    )
+
+    string_llhs = stringnet([reshaped_input, params_repeated])
+
+    reshaped_llhs = tf.reshape(
+        string_llhs, (tf.shape(string_llhs)[0] // n_strings, n_strings)
+    )
+
+    sums = tf.reduce_sum(reshaped_llhs, axis=1)
+
+    # match the output shape that would come from chargenet
+    reshaped_sums = tf.reshape(sums, (tf.shape(sums)[0], 1))
+
+    return tf.keras.Model(inputs=[input_layer, param_inputs], outputs=reshaped_sums)
 
 
 #
