@@ -53,10 +53,12 @@ class LLHService:
         "_eval_llh",
         "_work_reqs",
         "_n_table_rows",
-        "_n_obs_features",
+        "_n_hit_features",
+        "_n_evt_features",
         "_n_hypos",
         "_n_hypo_params",
-        "_x_table",
+        "_hit_table",
+        "_evt_data_table",
         "_theta_table",
         "_stop_inds",
         "_next_table_ind",
@@ -78,7 +80,8 @@ class LLHService:
         poll_timeout,
         flush_period,
         n_hypo_params,
-        n_obs_features,
+        n_hit_features,
+        n_evt_features,
         batch_size,
         send_hwm,
         recv_hwm,
@@ -97,11 +100,15 @@ class LLHService:
         self._n_hypos = batch_size["n_hypos"]
         """number of hypotheses per batch"""
 
-        self._n_obs_features = n_obs_features
+        self._n_hit_features = n_hit_features
+        self._n_evt_features = n_evt_features
         self._n_hypo_params = n_hypo_params
 
-        self._x_table = np.zeros(
-            (self._n_table_rows, self._n_obs_features), dtype=np.float32
+        self._hit_table = np.zeros(
+            (self._n_table_rows, self._n_hit_features), dtype=np.float32
+        )
+        self._evt_data_table = np.zeros(
+            (self._n_hypos, self._n_evt_features), dtype=np.float32
         )
         self._theta_table = np.zeros(
             (self._n_hypos, self._n_hypo_params), dtype=np.float32
@@ -131,6 +138,12 @@ class LLHService:
             chargenet = tf.keras.models.load_model(
                 chargenet_file, custom_objects={"chargenet_trafo": chargenet_trafo}
             )
+
+            # remove activations to improve numerical stability
+            # (with sigmoid activation, ln(d/(1-d)) is equivalent to pre-activation d)
+            for model in hitnet, chargenet:
+                model.layers[-1].activation = tf.keras.activations.linear
+
             self._model = (hitnet, chargenet)
 
             self._eval_llh = eval_llh.freedom_nllh
@@ -140,7 +153,8 @@ class LLHService:
 
         # trace-compile the llh function in advance
         self._eval_llh(
-            tf.constant(self._x_table),
+            tf.constant(self._hit_table),
+            tf.constant(self._evt_data_table),
             tf.constant(self._theta_table),
             tf.constant(self._stop_inds),
             self._model,
@@ -164,28 +178,21 @@ class LLHService:
             router_mandatory=router_mandatory,
         )
 
-        # trace-compile the llh function in advance
-        self._eval_llh(
-            tf.constant(self._x_table),
-            tf.constant(self._theta_table),
-            tf.constant(self._stop_inds),
-            self._model,
-        )
-
         # store configuration info for clients
         self._client_conf = dict(
             batch_size=batch_size,
             n_hypo_params=n_hypo_params,
-            n_obs_features=n_obs_features,
+            n_hit_features=n_hit_features,
+            n_evt_features=n_evt_features,
             req_addr=req_addr,
         )
 
         # # jit compile self._fill_tables
         # self._fill_tables(
-        #     self._x_table,
+        #     self._hit_table,
         #     self._theta_table,
         #     self._stop_inds,
-        #     np.zeros(self._n_obs_features, np.float32),
+        #     np.zeros(self._n_hit_features, np.float32),
         #     np.zeros(self._n_hypo_params, np.float32),
         #     0,
         #     0,
@@ -245,12 +252,18 @@ class LLHService:
 
     def _process_message(self, msg_parts):
         # wstdout(".")
-        header_frames = msg_parts[:-2]
-        x, theta = msg_parts[-2:]
+        header_frames = msg_parts[:-3]
+        hit_data, evt_data, theta = msg_parts[-3:]
 
-        x = np.frombuffer(x, np.float32)
-        n_obs = int(len(x) / self._n_obs_features)
-        x = x.reshape(n_obs, self._n_obs_features)
+        hit_data = np.frombuffer(hit_data, np.float32)
+        n_hits = int(len(hit_data) / self._n_hit_features)
+        hit_data = hit_data.reshape(n_hits, self._n_hit_features)
+
+        evt_data = np.frombuffer(evt_data, np.float32)
+        # to-do: potentially add better error checking here.
+        # for now, message will be discarded if shape of evt_data is wrong
+        if evt_data.size != self._n_evt_features:
+            return
 
         thetas = np.frombuffer(theta, np.float32)
         batch_size = int(len(thetas) / self._n_hypo_params)
@@ -259,7 +272,7 @@ class LLHService:
         next_ind = self._next_table_ind
         hypo_ind = self._next_hypo_ind
 
-        n_rows = n_obs * batch_size
+        n_rows = n_hits * batch_size
 
         # to-do: add better error checking
         # for now, message will be ignored if batch size is too large
@@ -277,25 +290,41 @@ class LLHService:
             stop_hypo_ind = batch_size
 
         self._record_req(
-            x, thetas, next_ind, hypo_ind, stop_ind, stop_hypo_ind, header_frames
+            hit_data,
+            evt_data,
+            thetas,
+            next_ind,
+            hypo_ind,
+            stop_ind,
+            stop_hypo_ind,
+            header_frames,
         )
         # self._numba_record_req(x, thetas, next_ind, hypo_ind, header_frames)
 
     # @profile
     def _record_req(
-        self, x, thetas, next_ind, hypo_ind, stop_ind, stop_hypo_ind, header_frames
+        self,
+        hit_data,
+        evt_data,
+        thetas,
+        next_ind,
+        hypo_ind,
+        stop_ind,
+        stop_hypo_ind,
+        header_frames,
     ):
         batch_size = len(thetas)
-        n_obs = len(x)
+        n_hits = len(hit_data)
 
-        # fill table with observations and hypothesis parameters
-        self._x_table[next_ind:stop_ind] = np.tile(x, (batch_size, 1))
+        # fill tables with data and hypothesis parameters
+        self._hit_table[next_ind:stop_ind] = np.tile(hit_data, (batch_size, 1))
+        self._evt_data_table[hypo_ind:stop_hypo_ind] = evt_data
         self._theta_table[hypo_ind:stop_hypo_ind] = thetas
 
         # update stop indices
-        next_stop = next_ind + n_obs
+        next_stop = next_ind + n_hits
         self._stop_inds[hypo_ind : hypo_ind + batch_size] = np.arange(
-            next_stop, next_stop + n_obs * batch_size, n_obs
+            next_stop, next_stop + n_hits * batch_size, n_hits
         )
 
         # record work request information
@@ -310,7 +339,7 @@ class LLHService:
     #     # @profile
     #     def _numba_record_req(self, x, thetas, next_ind, hypo_ind, header_frames):
     #         self._fill_tables(
-    #             self._x_table,
+    #             self._hit_table,
     #             self._theta_table,
     #             self._stop_inds,
     #             x,
@@ -400,10 +429,13 @@ class LLHService:
 
         if self._work_reqs:
             # wstdout("+")
-            x_table = tf.constant(self._x_table)
+            hit_data_table = tf.constant(self._hit_table)
+            evt_data_table = tf.constant(self._evt_data_table)
             theta_table = tf.constant(self._theta_table)
             stop_inds = tf.constant(self._stop_inds)
-            llh_sums = self._eval_llh(x_table, theta_table, stop_inds, self._model)
+            llh_sums = self._eval_llh(
+                hit_data_table, evt_data_table, theta_table, stop_inds, self._model
+            )
             llhs = llh_sums.numpy()
 
             # self._dispatch_replies(llhs)

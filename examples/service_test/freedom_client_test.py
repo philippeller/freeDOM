@@ -41,13 +41,14 @@ def main():
     with open(args.data_file, "rb") as f:
         event = pickle.load(f)[8]
 
-    hits = event["hits"].flatten()
-    theta = event["params"].flatten()
+    hit_data = event["hits"]
+    evt_data = event["total_charge"]
+    theta = event["params"]
 
     llhs = []
     start = time.time()
     for i in range(N_ITERATIONS):
-        llhs.append(client.eval_llh(hits, theta))
+        llhs.append(client.eval_llh(hit_data, evt_data, theta))
     delta = time.time() - start
 
     print(

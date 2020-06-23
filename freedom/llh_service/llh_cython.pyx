@@ -88,7 +88,8 @@ cpdef dispatch_replies(Socket sock, list work_reqs,
         
 cpdef dispatch_request(Socket sock,
                        bytes req_id,  
-                       np.ndarray[np.float32_t, ndim=1, mode='c'] x,
+                       np.ndarray[np.float32_t, ndim=1, mode='c'] hit_data,
+                       np.ndarray[np.float32_t, ndim=1, mode='c'] evt_data,
                        np.ndarray[np.float32_t, ndim=1, mode='c'] theta):
     '''
     dispatch a request from the LLH client to the service
@@ -96,7 +97,8 @@ cpdef dispatch_request(Socket sock,
 
     cdef void* c_sock = sock.handle
     cdef const char* req_id_bytes = req_id
-    cdef const char* x_bytes = <const char *>&x[0] 
+    cdef const char* hit_data_bytes = <const char *>&hit_data[0] 
+    cdef const char* evt_data_bytes = <const char *>&evt_data[0] 
     cdef const char* theta_bytes = <const char *>&theta[0] 
 
     cdef libzmq.zmq_msg_t msg
@@ -108,10 +110,16 @@ cpdef dispatch_request(Socket sock,
     memcpy(libzmq.zmq_msg_data(&msg), req_id_bytes, size)
     send_error_check(c_sock, &msg, libzmq.ZMQ_SNDMORE)
     
-    # send x
-    size = len(x)*sizeof(np.float32_t)
+    # send hit data
+    size = len(hit_data)*sizeof(np.float32_t)
     libzmq.zmq_msg_init_size(&msg, size)
-    memcpy(libzmq.zmq_msg_data(&msg), x_bytes, size)
+    memcpy(libzmq.zmq_msg_data(&msg), hit_data_bytes, size)
+    send_error_check(c_sock, &msg, libzmq.ZMQ_SNDMORE)
+
+    # send event data
+    size = len(evt_data)*sizeof(np.float32_t)
+    libzmq.zmq_msg_init_size(&msg, size)
+    memcpy(libzmq.zmq_msg_data(&msg), evt_data_bytes, size)
     send_error_check(c_sock, &msg, libzmq.ZMQ_SNDMORE)
     
     # send theta

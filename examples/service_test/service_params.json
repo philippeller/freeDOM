@@ -4,7 +4,8 @@
     "poll_timeout": 1,
     "flush_period": 1,
     "n_hypo_params": 8,
-    "n_obs_features": 9,
+    "n_hit_features": 9,
+    "n_evt_features": 2,
     "batch_size" : {
       "n_hypos": 256,
       "n_observations": 6000 
@@ -13,7 +14,7 @@
     "recv_hwm": 10000,
     "use_freeDOM_model": true,
     "hitnet_file": "HitNet_logE18_May_2020-21h02/epoch_32_model.hdf5",
-    "chargenet_file": "ChargeNet_logE_18_May_2020-21h03/epoch_400_model.hdf5",
+    "chargenet_file": "ChargeNet_nChannels_22_May_2020-11h05/epoch_400_model.hdf5",
     "router_mandatory": true,
     "bypass_tensorflow": false
 }
