@@ -151,7 +151,6 @@ class LLHService:
                 chargenet.layers[-1].activation = tf.keras.activations.linear
 
             elif stringnet_file is not None:
-                print("stringnet")
                 stringnet_file = self._get_model_path(stringnet_file)
                 stringnet = tf.keras.models.load_model(
                     stringnet_file, custom_objects={"stringnet_trafo": stringnet_trafo}
