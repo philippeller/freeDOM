@@ -4,7 +4,7 @@ __author__ = "Aaron Fienberg"
 
 import tensorflow as tf
 
-# working freeDOM nllh
+
 @tf.function
 def freedom_nllh(hit_data, evt_data, theta, stop_inds, models, charge_ind=4):
     """
@@ -56,6 +56,58 @@ def freedom_nllh(hit_data, evt_data, theta, stop_inds, models, charge_ind=4):
 
     # combine hitnet and chargenet
     return hit_llh_sums[:, 0, 0] + charge_llhs
+
+
+def wrap_partial_chargenet(partialnet, n_params, n_groups, features_per_group):
+    """builds a "flat chargenet" model from a "partial chargenet" model
+    
+    "flat chargenet" models take a flat array of event level features and output a single
+    LLH value per event. This is the format expected in the eval_llh.freedom_nnlh tf.function.
+
+    "partial chargenets" such as layernet and stringnet are fed a number of
+    groups of features per event, e.g. per-string features or per-layer features,
+    and the outputs for each group within an event must be summed to obtain an event-level LLH value.
+
+    This function wraps "partial chargenets" to create models presenting a "flat chargenet" interface.
+    
+    Parameters
+    ----------
+    partialnet : tf.Keras.model
+        currently either stringnet or layernet
+    n_params : int
+        number of hypothesis parameters
+    n_groups : int
+        number of strings for stringnet, number of layers for layernet
+    features_per_group : int
+        examples: 5 for stringnet, 4 for layernet
+
+    Returns
+    ----------
+    tf.Keras.model
+        A "chargenet-like" model that takes one fixed-size array of event level features per
+        event. This object should be usable as a chargenet in freedom_nllh
+    """
+
+    param_inputs = tf.keras.Input(shape=(n_params,))
+    params_repeated = tf.repeat(param_inputs, n_groups, axis=0)
+
+    input_layer = tf.keras.Input(shape=(features_per_group * n_groups,))
+    reshaped_input = tf.reshape(
+        input_layer, (tf.shape(input_layer)[0] * n_groups, features_per_group)
+    )
+
+    group_llhs = partialnet([reshaped_input, params_repeated])
+
+    reshaped_llhs = tf.reshape(
+        group_llhs, (tf.shape(group_llhs)[0] // n_groups, n_groups)
+    )
+
+    sums = tf.reduce_sum(reshaped_llhs, axis=1)
+
+    # match the output shape that would come from chargenet
+    reshaped_sums = tf.reshape(sums, (tf.shape(sums)[0], 1))
+
+    return tf.keras.Model(inputs=[input_layer, param_inputs], outputs=reshaped_sums)
 
 
 #
