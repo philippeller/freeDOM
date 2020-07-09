@@ -124,6 +124,105 @@ class hitnet_trafo(tf.keras.layers.Layer):
             
         return out
     
+class domnet_trafo(tf.keras.layers.Layer):
+    '''Class to transfor inputs for domnet
+    '''
+    
+    def __init__(self, labels, min_energy=0.1, max_energy=1e4):
+        '''
+        Parameters:
+        -----------
+
+        labels : list
+            list of labels corresponding to the data array
+        '''
+        
+        super().__init__()
+
+        self.labels = labels
+        self.min_energy = min_energy
+        self.max_energy = max_energy
+        
+        self.azimuth_idx = labels.index('azimuth')
+        self.zenith_idx = labels.index('zenith')
+        self.x_idx = labels.index('x')
+        self.y_idx = labels.index('y')
+        self.z_idx = labels.index('z')
+        self.cascade_energy_idx = labels.index('cascade_energy')
+        self.track_energy_idx = labels.index('track_energy')
+        
+    def get_config(self):
+        return {'labels': self.labels, 'max_energy': self.min_energy, 'max_energy': self.max_energy}
+
+    def call(self, dom, params):
+        '''
+        Parameters:
+        -----------
+
+        dom : tensor
+            shape (N, 4), containing hit dom position x, y, z, and charge
+
+        params : tensor
+            shape (N, len(labels))
+
+        '''
+        
+        cosphi = tf.math.cos(params[:, self.azimuth_idx])
+        sinphi = tf.math.sin(params[:, self.azimuth_idx])
+        sintheta = tf.math.sin(params[:, self.zenith_idx])
+        
+        dir_x = sintheta * cosphi
+        dir_y = sintheta * sinphi
+        dir_z = tf.math.cos(params[:, self.zenith_idx])
+        
+        dx = params[:, self.x_idx] - dom[:,0]
+        dy = params[:, self.y_idx] - dom[:,1]
+        dz = params[:, self.z_idx] - dom[:,2]
+        
+        # distance DOM - vertex
+        rho = tf.math.sqrt(tf.math.square(dx) + tf.math.square(dy))
+        dist = tf.math.sqrt(tf.math.square(dx) + tf.math.square(dy) + tf.math.square(dz))     
+        
+        absdeltaphidir = tf.abs(tf.math.acos(
+                                tf.clip_by_value(-tf.math.divide_no_nan((cosphi*dx + sinphi*dy), rho),
+                                                 clip_value_min = -1.,
+                                                 clip_value_max = +1.,
+                                                )
+                                            )
+                                )
+
+        costhetadir = tf.math.divide_no_nan(rho, dist)
+        sinthetadir = tf.sqrt(1 - tf.math.square(costhetadir))
+        
+        # so it is 0 at the poles?
+        absdeltaphidir *= sintheta * sinthetadir
+
+        cascade_energy = tf.math.log(tf.clip_by_value(params[:, self.cascade_energy_idx], self.min_energy, self.max_energy))
+        track_energy = tf.math.log(tf.clip_by_value(params[:, self.track_energy_idx], self.min_energy, self.max_energy))
+        
+        out = tf.stack([
+                 dom[:,0],
+                 dom[:,1],
+                 dom[:,2],
+                 dom[:,3],
+                 dist,
+                 #rho ?,
+                 costhetadir,
+                 absdeltaphidir,
+                 dir_x,
+                 dir_y,
+                 dir_z,
+                 dx,
+                 dy,
+                 dz,
+                 cascade_energy,
+                 track_energy
+                ],
+                axis=1
+                )    
+            
+        return out
+    
 class stringnet_trafo(tf.keras.layers.Layer):
     '''Class to transfor inputs for stringnet
     '''
