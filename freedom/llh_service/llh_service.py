@@ -93,18 +93,21 @@ class LLHService:
         chargenet_file=None,
         stringnet_file=None,
         layernet_file=None,
+        domnet_file=None,
         router_mandatory=False,
         bypass_tensorflow=False,
         n_strings=86,
         features_per_string=5,
         n_layers=60,
         features_per_layer=4,
+        ndoms=None,
+        features_per_dom=4,
     ):
-        if (chargenet_file is None) + (stringnet_file is None) + (
+        if (chargenet_file is None) + (stringnet_file is None) + (domnet_file is None) + (
             layernet_file is None
-        ) != 2:
+        ) != 3:
             raise RuntimeError(
-                "You must select exactly one of chargenet, stringnet, or layernet."
+                "You must select exactly one of chargenet, stringnet, layernet, or domnet."
             )
 
         self._work_reqs = []
@@ -174,6 +177,20 @@ class LLHService:
 
                 chargenet = eval_llh.wrap_partial_chargenet(
                     layernet, n_hypo_params, n_layers, features_per_layer
+                )
+
+            elif domnet_file is not None:
+                if ndoms is None:
+                    raise ValueError(f'ndoms must be specified when using domnet!')
+
+                domnet_file = self._get_model_path(domnet_file)
+                domnet = tf.keras.models.load_model(
+                    domnet_file, custom_objects={"domnet_trafo": domnet_trafo}
+                )
+                domnet.layers[-1].activation = tf.keras.activations.linear
+
+                chargenet = eval_llh.wrap_partial_chargenet(
+                    layernet, n_hypo_params, n_layers, features_per_dom
                 )
 
             self._model = (hitnet, chargenet)
