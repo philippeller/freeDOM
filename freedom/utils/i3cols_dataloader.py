@@ -92,12 +92,66 @@ def load_charges(dir='/home/iwsatlas1/peller/work/oscNext/level7_v01.04/140000_i
     params = get_params(labels, mcprimary, mctree, mctree_idx)
     return total_charge, params, labels
 
+def load_doms(dir='/home/iwsatlas1/peller/work/oscNext/level7_v01.04/140000_i3cols',
+              labels=['x', 'y', 'z', 'time', 'azimuth','zenith', 'cascade_energy', 'track_energy'],
+              geo=pkg_resources.resource_filename('freedom', 'resources/geo_array.npy'),
+              dtype=np.float32,
+              reduced=False):
+    """
+    Create training data for domnet, if reduced is True just uses DOMs in resources/allowed_DOMs.npy
+    
+    Returns:
+    --------
+    dom_charges : ndarray
+        shape (N_events*N_usedDOMs, 4)
+    repeated_params : ndarray
+        shape (N_events*N_usedDOMs, len(labels))
+    labels
+    """
+    
+    hits_idx = np.load(os.path.join(dir, 'SRTTWOfflinePulsesDC/index.npy'))
+    hits = np.load(os.path.join(dir, 'SRTTWOfflinePulsesDC/data.npy'))
+    mctree_idx = np.load(os.path.join(dir, 'I3MCTree/index.npy'))
+    mctree = np.load(os.path.join(dir, 'I3MCTree/data.npy'))
+    mcprimary = np.load(os.path.join(dir, 'MCInIcePrimary/data.npy'))
+
+    geo = np.load(geo)
+    if reduced:
+        allowed_DOMs = np.load(pkg_resources.resource_filename('freedom', 'resources/allowed_DOMs.npy'))
+    else:
+        allowed_DOMs = np.arange(5160)
+    
+    # construct strings array
+    # shape N x N_usedDOMs x (x, y, z, q)
+    
+    doms = np.zeros(hits_idx.shape + (len(allowed_DOMs), 4,), dtype=dtype)
+    doms[:, :, 0:3] = geo.reshape((5160, 3))[allowed_DOMs]
+
+    # Get charge per event and DOM
+    for i in range(len(hits_idx)):
+        this_idx = hits_idx[i]
+        this_hits = hits[this_idx['start'] : this_idx['stop']]
+        for hit in this_hits:
+            idx = (hit['key']['string'] - 1) * 60 + hit['key']['om'] - 1
+            idx = np.where(allowed_DOMs == idx)[0]
+            if len(idx) == 1:
+                doms[i, idx[0], 3] += hit['pulse']['charge']
+
+    doms = doms.reshape(-1, 4)
+    
+    params = get_params(labels, mcprimary, mctree, mctree_idx)
+
+    repeated_params = np.repeat(params, repeats=len(allowed_DOMs), axis=0)
+    
+    return doms, repeated_params, labels
+
 def load_strings(dir='/home/iwsatlas1/peller/work/oscNext/level7_v01.04/140000_i3cols',
                  labels=['x', 'y', 'z', 'time', 'azimuth','zenith', 'cascade_energy', 'track_energy'],
                  geo=pkg_resources.resource_filename('freedom', 'resources/geo_array.npy'),
-                 dtype=np.float32):
+                 dtype=np.float32,
+                 reduced=False):
     """
-    Create training data for hitnet
+    Create training data for stringnet
     
     Returns:
     --------
@@ -115,12 +169,16 @@ def load_strings(dir='/home/iwsatlas1/peller/work/oscNext/level7_v01.04/140000_i
     mcprimary = np.load(os.path.join(dir, 'MCInIcePrimary/data.npy'))
 
     geo = np.load(geo)
+    if reduced:
+        allowed_strings = np.load(pkg_resources.resource_filename('freedom', 'resources/allowed_strings.npy'))
+    else:
+        allowed_strings = np.arange(86)
     
     # construct strings array
-    # shape N x 86 x (x, y, min(z), q, nChannels)
+    # shape N x N_usedStrings x (x, y, min(z), q, nChannels)
     
-    strings = np.zeros(hits_idx.shape + (86, 5,), dtype=dtype)
-    strings[:, :, 0:3] = geo[np.newaxis, :, -1]
+    strings = np.zeros(hits_idx.shape + (len(allowed_strings), 5,), dtype=dtype)
+    strings[:, :, 0:3] = geo[np.newaxis, :, -1][0][allowed_strings]
 
     # Get charge per event and string
     for i in range(len(hits_idx)):
@@ -128,24 +186,26 @@ def load_strings(dir='/home/iwsatlas1/peller/work/oscNext/level7_v01.04/140000_i
         this_hits = hits[this_idx['start'] : this_idx['stop']]
         for j, hit in enumerate(this_hits):
             s_idx = hit['key']['string'] - 1
-            strings[i, s_idx, 3] += hit['pulse']['charge']
-            if j == 0 or hit['key'] != this_hits[j-1]['key']: # assuming hits are sorted by DOMs
-                strings[i, s_idx, 4] += 1
+            s_idx = np.where(allowed_strings == s_idx)[0]
+            if len(s_idx) == 1:
+                strings[i, s_idx[0], 3] += hit['pulse']['charge']
+                if j == 0 or hit['key'] != this_hits[j-1]['key']: # assuming hits are sorted by DOMs
+                    strings[i, s_idx[0], 4] += 1
 
     strings = strings.reshape(-1, 5)
     
     params = get_params(labels, mcprimary, mctree, mctree_idx)
 
-    repeated_params = np.repeat(params, repeats=86, axis=0)
+    repeated_params = np.repeat(params, repeats=len(allowed_strings), axis=0)
     
     return strings, repeated_params, labels
-
 
 def load_layers(dir='/home/iwsatlas1/peller/work/oscNext/level7_v01.04/140000_i3cols',
                 labels=['x', 'y', 'z', 'time', 'azimuth','zenith', 'cascade_energy', 'track_energy'],
                 geo=pkg_resources.resource_filename('freedom', 'resources/geo_array.npy'),
                 dtype=np.float32,
-                n_layers=60):
+                n_layers=60,
+                reduced=False):
     """
     Create training data for layernet
     
@@ -165,15 +225,20 @@ def load_layers(dir='/home/iwsatlas1/peller/work/oscNext/level7_v01.04/140000_i3
     mcprimary = np.load(os.path.join(dir, 'MCInIcePrimary/data.npy'))
 
     geo = np.load(geo)
+    if reduced:
+        assert n_layers == 60, 'At the moment reduction will only work properly with 60 layers'
+        allowed_layers = np.load(pkg_resources.resource_filename('freedom', 'resources/allowed_layers.npy'))
+    else:
+        allowed_layers = np.arange(n_layers)
     min_z, max_z = np.min(geo[:, : , 2]), np.max(geo[:, : , 2])
     z_edges = np.linspace(min_z, max_z+1e-3, n_layers+1)
     
     # construct layers array
-    # shape N x n_layers x (nDOMs, z, q, nChannels)
+    # shape N x N_usedLayers x (nDOMs, z, q, nChannels)
     
-    layers = np.zeros(hits_idx.shape + (n_layers, 4,), dtype=dtype)
-    layers[:, :, 0] = np.histogram(geo[:, : , 2].flatten(), z_edges)[0]
-    layers[:, :, 1] = (z_edges[:-1]+z_edges[1:])/2
+    layers = np.zeros(hits_idx.shape + (len(allowed_layers), 4,), dtype=dtype)
+    layers[:, :, 0] = np.histogram(geo[:, : , 2].flatten(), z_edges)[0][allowed_layers]
+    layers[:, :, 1] = ((z_edges[:-1]+z_edges[1:])/2)[allowed_layers]
 
     # Get charge per event and layer
     for i in range(len(hits_idx)):
@@ -182,15 +247,17 @@ def load_layers(dir='/home/iwsatlas1/peller/work/oscNext/level7_v01.04/140000_i3
         for j, hit in enumerate(this_hits):
             z = geo[hit['key'][0]-1, hit['key'][1]-1, 2]
             b = np.digitize(z, z_edges)-1
-            layers[i, b, 2] += hit['pulse']['charge']
-            if j == 0 or hit['key'] != this_hits[j-1]['key']: # assuming hits are sorted by DOMs
-                layers[i, b, 3] += 1
+            b = np.where(allowed_layers == b)[0]
+            if len(b) == 1:
+                layers[i, b, 2] += hit['pulse']['charge']
+                if j == 0 or hit['key'] != this_hits[j-1]['key']: # assuming hits are sorted by DOMs
+                    layers[i, b, 3] += 1
 
     layers = layers.reshape(-1, 4)
     
     params = get_params(labels, mcprimary, mctree, mctree_idx)
 
-    repeated_params = np.repeat(params, repeats=n_layers, axis=0)
+    repeated_params = np.repeat(params, repeats=len(allowed_layers), axis=0)
     
     return layers, repeated_params, labels
 
@@ -241,6 +308,7 @@ def load_hits(dir='/home/iwsatlas1/peller/work/oscNext/level7_v01.04/140000_i3co
 
     
     return single_hits, repeated_params, labels
+
 
 def load_events(dir='/home/iwsatlas1/peller/work/oscNext/level7_v01.04/140000_i3cols',
               labels=['x', 'y', 'z', 'time', 'azimuth','zenith', 'cascade_energy', 'track_energy'],
