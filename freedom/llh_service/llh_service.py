@@ -19,10 +19,15 @@ import numpy as np
 
 # import numba
 import tensorflow as tf
+import tensorflow_addons as tfa
 import zmq
 
 from freedom.neural_nets.transformations import chargenet_trafo, hitnet_trafo
-from freedom.neural_nets.transformations import stringnet_trafo, layernet_trafo
+from freedom.neural_nets.transformations import (
+    stringnet_trafo,
+    layernet_trafo,
+    domnet_trafo,
+)
 from freedom.llh_service import llh_cython
 from freedom.llh_service import eval_llh
 
@@ -103,9 +108,9 @@ class LLHService:
         ndoms=None,
         features_per_dom=4,
     ):
-        if (chargenet_file is None) + (stringnet_file is None) + (domnet_file is None) + (
-            layernet_file is None
-        ) != 3:
+        if (chargenet_file is None) + (stringnet_file is None) + (
+            domnet_file is None
+        ) + (layernet_file is None) != 3:
             raise RuntimeError(
                 "You must select exactly one of chargenet, stringnet, layernet, or domnet."
             )
@@ -181,7 +186,7 @@ class LLHService:
 
             elif domnet_file is not None:
                 if ndoms is None:
-                    raise ValueError(f'ndoms must be specified when using domnet!')
+                    raise ValueError(f"ndoms must be specified when using domnet!")
 
                 domnet_file = self._get_model_path(domnet_file)
                 domnet = tf.keras.models.load_model(
@@ -190,7 +195,7 @@ class LLHService:
                 domnet.layers[-1].activation = tf.keras.activations.linear
 
                 chargenet = eval_llh.wrap_partial_chargenet(
-                    layernet, n_hypo_params, n_layers, features_per_dom
+                    domnet, n_hypo_params, ndoms, features_per_dom
                 )
 
             self._model = (hitnet, chargenet)
