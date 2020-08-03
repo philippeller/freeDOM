@@ -1,4 +1,5 @@
 import tensorflow as tf
+import tensorflow_addons as tfa
 import numpy as np
 import pkg_resources
 
@@ -163,4 +164,4 @@ class LLH():
 
         total_llh = all_hits_llh + charge_llh
 
-        return total_llh, charge_llh, all_hits_llh, single_hit_llhs.T
+        return total_llh, charge_llh, all_hits_llh, charge_llhs, single_hit_llhs#.T
