@@ -2,7 +2,7 @@
 import pkg_resources
 import numpy as np
 import tensorflow as tf
-from freedom.utils.i3cols_dataloader import *
+from freedom.utils.i3cols_dataloader import load_hits, load_charges, load_strings, load_layers, load_doms, get_energies, get_params
 from sklearn.model_selection import train_test_split
 from sklearn.utils import shuffle
 

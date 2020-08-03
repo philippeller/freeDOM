@@ -3,7 +3,7 @@ import tensorflow_addons as tfa
 import numpy as np
 import pkg_resources
 
-from freedom.neural_nets.transformations import *
+from freedom.neural_nets.transformations import chargenet_trafo, hitnet_trafo, stringnet_trafo, layernet_trafo, domnet_trafo
 
 class LLH():
     def __init__(self,
