@@ -2,8 +2,9 @@
 import pkg_resources
 import numpy as np
 import tensorflow as tf
-from freedom.utils.i3cols_dataloader import load_hits, load_charges, load_strings
+from freedom.utils.i3cols_dataloader import *
 from sklearn.model_selection import train_test_split
+from sklearn.utils import shuffle
 
 
 class Data():
@@ -149,15 +150,21 @@ class Data():
 
 class DataGenerator(tf.keras.utils.Sequence):
     def __init__(self, 
-                 func, # e.g. load_charges
+                 func, # e.g. load_hits
                  dirs=['/home/iwsatlas1/peller/work/oscNext/level7_v01.04/140000_i3cols'], 
-                 labels=['x', 'y', 'z', 'time', 'azimuth','zenith', 'cascade_energy', 'track_energy'], 
-                 batch_size=4096):
+                 labels=['x', 'y', 'z', 'time', 'azimuth','zenith', 'cascade_energy', 'track_energy'],
+                 batch_size=4096,
+                 reduced=False,
+                ):
         
         self.batch_size = int(batch_size/2) # half true labels half false labels
         self.labels = labels
         for i, dir in enumerate(dirs):
-            data, params, _ = func(dir=dir, labels=labels)
+            if reduced:
+                data, params, _ = func(dir=dir, labels=labels, reduced=True)
+            else:
+                data, params, _ = func(dir=dir, labels=labels)
+            
             if i == 0:
                 self.data = data
                 self.params = params
@@ -165,6 +172,7 @@ class DataGenerator(tf.keras.utils.Sequence):
                 self.data = np.append(self.data, data, axis=0)
                 self.params = np.append(self.params, params, axis=0)
         
+        self.indexes = np.arange(len(self.data))
         self.on_epoch_end()
 
     def __len__(self):
@@ -198,7 +206,6 @@ class DataGenerator(tf.keras.utils.Sequence):
 
     def on_epoch_end(self):
         'Updates indexes after each epoch'
-        self.indexes = np.arange(len(self.data))
         np.random.shuffle(self.indexes) # mix between batches
 
     def __data_generation(self, indexes_temp):
@@ -209,10 +216,10 @@ class DataGenerator(tf.keras.utils.Sequence):
 
         d_true_labels = np.ones((self.batch_size, 1), dtype=x.dtype)
         d_false_labels = np.zeros((self.batch_size, 1), dtype=x.dtype)
-        d_labels = np.append(d_true_labels, d_false_labels)
-
+        
         d_X = np.append(x, x, axis=0)
         d_T = np.append(t, np.random.permutation(t), axis=0)
+        d_labels = np.append(d_true_labels, d_false_labels)
         
         d_X, d_T, d_labels = self.unison_shuffled_copies(d_X, d_T, d_labels)
 
@@ -224,3 +231,180 @@ class DataGenerator(tf.keras.utils.Sequence):
         p = np.random.permutation(len(a))
         
         return a[p], b[p], c[p]
+
+class DataGenerator_HitNet(tf.keras.utils.Sequence):
+    def __init__(self, 
+                 dirs=['/home/iwsatlas1/peller/work/oscNext/level7_v01.04/140000_i3cols'], 
+                 labels=['x', 'y', 'z', 'time', 'azimuth','zenith', 'cascade_energy', 'track_energy'],
+                 batch_size=4096,
+                ):
+        
+        self.batch_size = int(batch_size/2) # half true labels half false labels
+        self.labels = labels
+        for i, dir in enumerate(dirs):
+            data, params, _ = load_hits(dir=dir, labels=labels)
+            if i == 0:
+                self.data = data
+                self.params = params
+            else:
+                self.data = np.append(self.data, data, axis=0)
+                self.params = np.append(self.params, params, axis=0)
+        self.shuffle_params()
+        
+        self.indexes = np.arange(len(self.data))
+        self.on_epoch_end()
+
+    def __len__(self):
+        'Denotes the number of batches per epoch'
+        return int(np.floor(len(self.data) / self.batch_size))
+
+    def __getitem__(self, index):
+        # Generate indexes of the batch
+        indexes = self.indexes[index*self.batch_size:(index+1)*self.batch_size]
+
+        # Generate data
+        X, y = self.__data_generation(indexes)
+
+        return X, y
+
+    def on_epoch_end(self):
+        'Updates indexes after each epoch'
+        np.random.shuffle(self.indexes) # mix between batches
+        
+    def shuffle_params(self):
+        shuffled_params = np.empty_like(self.params)
+        u,c = np.unique(self.data[:, 7], return_counts=True)
+        for DOM_index in u[c>1]:
+            mask = self.data[:, 7] == DOM_index
+            shuffled_params[mask] = np.random.permutation(self.params[mask])
+        
+        self.shuffled_params = shuffled_params
+
+    def __data_generation(self, indexes_temp):
+        'Generates data containing batch_size samples'
+        # Generate data similar to Data.get_dataset()
+        x = np.take(self.data, indexes_temp, axis=0)
+        t = np.take(self.params, indexes_temp, axis=0)
+        tr = np.take(self.shuffled_params, indexes_temp, axis=0)
+
+        d_true_labels = np.ones((self.batch_size, 1), dtype=x.dtype)
+        d_false_labels = np.zeros((self.batch_size, 1), dtype=x.dtype)
+        
+        d_X = np.append(x, x, axis=0)
+        d_T = np.append(t, tr, axis=0)
+        d_labels = np.append(d_true_labels, d_false_labels)
+        
+        d_X, d_T, d_labels = self.unison_shuffled_copies(d_X, d_T, d_labels)
+
+        return [d_X, d_T], d_labels
+    
+    def unison_shuffled_copies(self, a, b, c):
+        'Shuffles arrays in the same way'
+        assert len(a) == len(b) == len(c)
+        p = np.random.permutation(len(a))
+        
+        return a[p], b[p], c[p]
+    
+class DataGenerator_DOMNet(tf.keras.utils.Sequence):
+    def __init__(self, 
+                 dirs=['/home/iwsatlas1/peller/work/oscNext/level7_v01.04/140000_i3cols'], 
+                 labels=['x', 'y', 'z', 'time', 'azimuth','zenith', 'cascade_energy', 'track_energy'],
+                 batch_size=32,
+                 container_size=1,
+                 reduced=True,
+                ):
+        
+        self.batch_size = int(batch_size/2) # half true labels half false labels
+        self.container_size = container_size
+        self.labels = labels
+        for i, dir in enumerate(dirs):
+            if i == 0:
+                self.hits_idx = np.load(os.path.join(dir, 'SRTTWOfflinePulsesDC/index.npy'))
+                self.hits = np.load(os.path.join(dir, 'SRTTWOfflinePulsesDC/data.npy'))
+                self.mctree_idx = np.load(os.path.join(dir, 'I3MCTree/index.npy'))
+                self.mctree = np.load(os.path.join(dir, 'I3MCTree/data.npy'))
+                self.mcprimary = np.load(os.path.join(dir, 'MCInIcePrimary/data.npy'))
+            else:
+                hits_idx = np.load(os.path.join(dir, 'SRTTWOfflinePulsesDC/index.npy'))
+                for i, h in enumerate(hits_idx):
+                    hits_idx[i] = (h[0]+len(self.hits), h[1]+len(self.hits))
+                self.hits_idx = np.append(self.hits_idx, hits_idx)
+                self.hits = np.append(self.hits, np.load(os.path.join(dir, 'SRTTWOfflinePulsesDC/data.npy')))
+                
+                mctree_idx = np.load(os.path.join(dir, 'I3MCTree/index.npy'))
+                for i, m in enumerate(mctree_idx):
+                    mctree_idx[i] = (m[0]+len(self.mctree), m[1]+len(self.mctree))
+                self.mctree_idx = np.append(self.mctree_idx, mctree_idx)
+                self.mctree = np.append(self.mctree, np.load(os.path.join(dir, 'I3MCTree/data.npy')))
+                self.mcprimary = np.append(self.mcprimary, np.load(os.path.join(dir, 'MCInIcePrimary/data.npy')))
+
+        if reduced:
+            self.allowed_DOMs = np.load(pkg_resources.resource_filename('freedom', 'resources/allowed_DOMs.npy'))
+        else:
+            self.allowed_DOMs = np.arange(5160)
+        geo = np.load(pkg_resources.resource_filename('freedom', 'resources/geo_array.npy'))
+        self.doms_blank = np.zeros((self.container_size*self.batch_size,) + (5160, 4,), dtype=np.float32)
+        self.doms_blank[:, self.allowed_DOMs, 0:3] = geo.reshape((5160, 3))[self.allowed_DOMs]
+        #self.random_state = np.random.permutation(np.arange(2*self.container_size*self.batch_size*len(self.allowed_DOMs)))
+        
+        self.indexes = np.arange(len(self.hits_idx))
+        self.on_epoch_end()
+
+    def __len__(self):
+        'Denotes the number of batches per epoch'
+        return int(np.floor(len(self.hits_idx) / self.batch_size))
+
+    def __getitem__(self, index):
+        # generate data for some batches
+        if index%self.container_size == 0:
+            indexes = self.indexes[index*self.batch_size:(index+self.container_size)*self.batch_size]
+            self.X_container, self.T_container, self.y_container = self.__data_generation(indexes)
+        
+        start = (index%self.container_size)*self.batch_size*2*len(self.allowed_DOMs)
+        stop = (index%self.container_size+1)*self.batch_size*2*len(self.allowed_DOMs)
+        X = [self.X_container[start:stop], self.T_container[start:stop]]
+        y = self.y_container[start:stop]
+
+        return X, y
+
+    def on_epoch_end(self):
+        'Updates indexes after each epoch'
+        np.random.shuffle(self.indexes) # mix between batches
+
+    def __data_generation(self, indexes_temp):
+        'Generates data containing batch_size samples'
+        
+        hits_idx_temp = np.take(self.hits_idx, indexes_temp, axis=0)
+        x = self.load_doms(hits_idx_temp, self.hits, len(indexes_temp))
+        
+        mcprimary_temp = np.take(self.mcprimary, indexes_temp, axis=0)
+        mctree_idx_temp = np.take(self.mctree_idx, indexes_temp, axis=0)
+        t = get_params(self.labels, mcprimary_temp, self.mctree, mctree_idx_temp)
+        tr = np.roll(t, 1, axis=0)
+        t = np.repeat(t, repeats=len(x)/len(t), axis=0)
+        tr = np.repeat(tr, repeats=len(x)/len(tr), axis=0)
+
+        d_true_labels = np.ones((len(x), 1), dtype=x.dtype)
+        d_false_labels = np.zeros((len(x), 1), dtype=x.dtype)
+        
+        d_X = np.append(x, x, axis=0)
+        d_T = np.append(t, tr, axis=0)
+        d_labels = np.append(d_true_labels, d_false_labels)
+
+        d_X, d_T, d_labels = shuffle(d_X, d_T, d_labels)
+        #R = np.roll(self.random_state, np.random.randint(len(d_X)))[:2*len(indexes_temp)*len(self.allowed_DOMs)]
+
+        return d_X, d_T, d_labels
+    
+    def load_doms(self, hits_idx, hits, Nevents):
+        doms = self.doms_blank.copy()[:Nevents]
+        for i in range(len(hits_idx)):
+            this_idx = hits_idx[i]
+            this_hits = hits[this_idx[0] : this_idx[1]]
+            idx = (this_hits['key']['string'] - 1) * 60 + this_hits['key']['om'] - 1
+            charges = this_hits['pulse']['charge']
+            for j in range(len(this_hits)):
+                doms[i, idx[j], 3] += charges[j]
+
+        doms = np.take(doms, self.allowed_DOMs, axis=1)
+        return doms.reshape(-1, 4)

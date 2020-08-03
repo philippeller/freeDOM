@@ -14,7 +14,7 @@ def get_energies(mcprimary, mctree, mctree_idx, dtype=np.float32):
     
     for i in range(len(mctree_idx)):
         this_idx = mctree_idx[i]
-        this_mctree = mctree[this_idx['start'] : this_idx['stop']]
+        this_mctree = mctree[this_idx[0] : this_idx[1]]
         pdg = this_mctree['particle']['pdg_encoding']
         en = this_mctree['particle']['energy']
     
@@ -272,7 +272,7 @@ def load_hits(dir='/home/iwsatlas1/peller/work/oscNext/level7_v01.04/140000_i3co
     Returns:
     --------
     single_hits : ndarray
-        shape (N_hits, 9)
+        shape (N_hits, 8)
     repeated_params : ndarray
         shape (N_hits, len(labels))
     labels
@@ -289,7 +289,7 @@ def load_hits(dir='/home/iwsatlas1/peller/work/oscNext/level7_v01.04/140000_i3co
     # constrcut hits array
     
     # shape N x (x, y, z, t, q, ...)
-    single_hits = np.empty(hits.shape + (9,), dtype=dtype)
+    single_hits = np.empty(hits.shape + (8,), dtype=dtype)
     string_idx = hits['key']['string'] - 1
     om_idx = hits['key']['om'] - 1
 
@@ -298,8 +298,7 @@ def load_hits(dir='/home/iwsatlas1/peller/work/oscNext/level7_v01.04/140000_i3co
     single_hits[:, 4] = hits['pulse']['charge']
     single_hits[:, 5] = hits['pulse']['flags'] & 1 # is LC or not?
     single_hits[:, 6] = (hits['pulse']['flags'] & 2) / 2 # has ATWD or not?
-    single_hits[:, 7] = string_idx
-    single_hits[:, 8] = om_idx
+    single_hits[:, 7] = string_idx * 60 + om_idx
     
     params = get_params(labels, mcprimary, mctree, mctree_idx)
 

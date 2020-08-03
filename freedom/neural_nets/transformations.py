@@ -92,15 +92,17 @@ class hitnet_trafo(tf.keras.layers.Layer):
         dt = hit[:,3] - params[:, self.time_idx]
               
         # difference c*t - r
-        delta = dt * self.speed_of_light - dist        
+        delta = dt * self.speed_of_light - dist
+        #delta_ice = dt * self.speed_of_light/1.3098 - dist
 
         cascade_energy = tf.math.log(tf.clip_by_value(params[:, self.cascade_energy_idx], self.min_energy, self.max_energy))
         track_energy = tf.math.log(tf.clip_by_value(params[:, self.track_energy_idx], self.min_energy, self.max_energy))
         
         out = tf.stack([
                  delta,
+                 #delta_ice,
                  dist,
-                 #rho ?,
+                 #rho,
                  costhetadir,
                  absdeltaphidir,
                  dir_x,
@@ -115,7 +117,6 @@ class hitnet_trafo(tf.keras.layers.Layer):
                  hit[:,5],
                  hit[:,6],
                  #hit[:,7],
-                 #hit[:,8],
                  cascade_energy,
                  track_energy
                 ],

@@ -1,8 +1,9 @@
 import tensorflow as tf
+import tensorflow_addons as tfa
 import numpy as np
 import pkg_resources
 
-from freedom.neural_nets.transformations import chargenet_trafo, hitnet_trafo, stringnet_trafo, layernet_trafo, domnet_trafo
+from freedom.neural_nets.transformations import *
 
 class LLH():
     def __init__(self,
@@ -163,4 +164,4 @@ class LLH():
 
         total_llh = all_hits_llh + charge_llh
 
-        return total_llh, charge_llh, all_hits_llh, single_hit_llhs.T
+        return total_llh, charge_llh, all_hits_llh, charge_llhs, single_hit_llhs#.T
