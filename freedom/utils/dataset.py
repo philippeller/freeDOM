@@ -1,4 +1,5 @@
 """Module to create tf.data.DataSet and DataGenerator instances for training"""
+import os
 import pkg_resources
 import numpy as np
 import tensorflow as tf
