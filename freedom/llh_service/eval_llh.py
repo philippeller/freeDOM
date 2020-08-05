@@ -11,7 +11,7 @@ def freedom_nllh(hit_data, evt_data, theta, stop_inds, models, charge_ind=4):
     hitnet/chargenet llh calculation
 
     Parameters
-     ----------
+    ----------
     hit_data: tf.constant
         table of hit data 
     evt_data: tf.constant
