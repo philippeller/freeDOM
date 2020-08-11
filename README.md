@@ -9,8 +9,6 @@ Use the [wiki](https://github.com/philippeller/freeDOM/wiki) for things other th
 
 ## Installation
 
-Use `git-lfs` with this project to include the tensorflow model files 
-
 It is recommended to install in-place, i.e.:
 ```
 pip install --editable .

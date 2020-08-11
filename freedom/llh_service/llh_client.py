@@ -108,7 +108,7 @@ class LLHClient:
         evt_data : numpy.ndarray, or something convertible to one  
             event-level features
         theta: numpy.ndarray, or something convertible to one 
-            hypothesis paramsrs
+            hypothesis params
         timeout : int, optional
             Wait for a reply up to `timeout` milliseconds
 
