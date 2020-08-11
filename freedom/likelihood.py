@@ -114,7 +114,8 @@ class LLH():
         # Charge Part
         if self.chargenet is not None:
             inputs = [np.repeat(event['total_charge'][np.newaxis, :], repeats=n_points, axis=0), params]
-            charge_llh = -self.chargenet.predict(inputs, batch_size=self.chargenet_batchsize)[:, 0]
+            charge_llhs = -self.chargenet.predict(inputs, batch_size=self.chargenet_batchsize)[:, 0]
+            charge_llh = charge_llhs
         elif self.stringnet is not None:
             strings = event['strings'][self.allowed_strings]
             inputs = []
@@ -145,6 +146,7 @@ class LLH():
 
         # Hit Net
         hits = event['hits']
+        #hits = hits[np.isin(hits[:, 7]*60 + hits[:, 8], self.allowed_DOMs, assume_unique=True)]
         n_hits = hits.shape[0]
 
         if n_hits > 0:
