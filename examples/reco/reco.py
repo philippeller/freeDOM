@@ -278,7 +278,7 @@ def main():
         proc.start()
         procs.append(proc)
 
-    # wait for the four services to start by attempting to connect to them
+    # wait for the LLH services to start by attempting to connect to them
     for ctrl_addr in ctrl_addrs:
         LLHClient(ctrl_addr=ctrl_addr, conf_timeout=60000)
 
