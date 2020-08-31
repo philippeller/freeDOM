@@ -1,0 +1,52 @@
+{
+    "test_events_file": "/home/atfienberg/freedomDataCopy/public_for_aaron/test_events.pkl",
+    
+    "service_conf": {
+        "poll_timeout": 1,
+        "flush_period": 1,
+        "n_hypo_params": 8,
+        "n_hit_features": 9,
+        "n_evt_features": 2,
+        "batch_size" : {
+          "n_hypos": 200,
+          "n_observations": 6000 
+        },
+        "send_hwm": 10000,
+        "recv_hwm": 10000,
+        "hitnet_file": "/home/atfienberg/freedomDataCopy/public_for_aaron/HitNet_ranger_14_Jul_2020-08h03/epoch_32_model.hdf5",
+        "chargenet_file": "ChargeNet_nChannels_22_May_2020-11h05/epoch_400_model.hdf5"
+    },
+    
+    "base_req_addr" : "ipc:///tmp/atftestrecoreq",
+    "base_ctrl_addr": "ipc:///tmp/atftestrecoctrl",
+    
+    "cuda_devices": [0, 1, 2, 3],
+
+    "n_workers" : 200,
+    
+    "par_names" : ["x", "y", "z", "time",
+                   "azimuth", "zenith", 
+                   "cascade energy", "track energy"],
+    
+    "n_live_points": 97,
+        
+    "init_range": [[-50, 50],
+                   [-50, 50],
+                   [-100, 100],
+                   [-1000, 0],
+                   [0, 6.283185307179586],
+                   [0, 3.141592653589793],
+                   [0, 1.7],
+                   [0, 1.7]],
+    
+    "param_search_limits": [[-200, 200],
+                           [-250, 250],
+                           [-800, -200],
+                           [8000, 11000],
+                           [0, 6.283185307179586],
+                           [0, 3.141592653589793],
+                           [5, 400],
+                           [0.1, 400]],
+    
+    "outfile_name" : "chargenet_reco"
+}
