@@ -30,7 +30,7 @@ from freedom.llh_service.llh_client import LLHClient
 from freedom.llh_service.llh_service import LLHService
 
 
-NAN_REPLACE_VAL = np.inf
+NAN_REPLACE_VAL = 1e10
 
 
 def get_out_of_bounds_func(limits):
@@ -94,9 +94,9 @@ def batch_crs_fit(
 
     eval_llh = get_batch_closure(client, event, out_of_bounds)
 
-    box_limits = initial_box(event["hit_data"], init_range)
-
     n_params = len(init_range)
+
+    box_limits = initial_box(event["hit_data"], init_range, n_params=n_params)
 
     uniforms = rng.uniform(size=(n_live_points, n_params))
 
@@ -274,7 +274,6 @@ def main():
     service_conf = conf["service_conf"]
 
     # add hit_data, evt_data keys based on the networks being used
-
     for event in events:
         event["hit_data"] = event["hits"][:, : service_conf["n_hit_features"]]
 
