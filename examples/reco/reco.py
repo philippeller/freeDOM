@@ -30,7 +30,7 @@ from freedom.llh_service.llh_client import LLHClient
 from freedom.llh_service.llh_service import LLHService
 
 
-NAN_REPLACE_VAL = 1e9
+NAN_REPLACE_VAL = np.inf
 
 
 def get_out_of_bounds_func(limits):
@@ -94,9 +94,9 @@ def batch_crs_fit(
 
     eval_llh = get_batch_closure(client, event, out_of_bounds)
 
-    box_limits = initial_box(event["hits"], init_range)
+    box_limits = initial_box(event["hit_data"], init_range)
 
-    n_params = len(event["params"])
+    n_params = len(init_range)
 
     uniforms = rng.uniform(size=(n_live_points, n_params))
 
@@ -181,7 +181,6 @@ def adjust_addr_string(base_str, gpu_ind):
         return f"{base_str}_{gpu_ind}"
     elif base_str.startswith("tcp"):
         split = base_str.split(":")
-        print(split)
         port_num = int(split[-1])
         return f'{":".join(split[:-1])}:{port_num + int(gpu_ind)}'
     raise RuntimeError("only tcp and ipc addresses are supported")
@@ -251,10 +250,7 @@ def main():
     # add hit_data, evt_data keys based on the networks being used
     # for now, support domnet and chargenet
     for event in events:
-        if service_conf["n_hit_features"] == 8:
-            event["hit_data"] = event["hits"][:, :8]
-        else:
-            event["hit_data"] = event["hits"]
+        event["hit_data"] = event["hits"][:, : service_conf["n_hit_features"]]
 
         if "domnet_file" in service_conf:
             event["evt_data"] = event["doms"][allowed_DOMs]
@@ -339,7 +335,7 @@ def main():
     summary_df = build_summary_df(all_outs, conf["par_names"])
     # store some metadata
     summary_df.attrs["reco_conf"] = conf
-    summary_df["reco_time"] = delta
+    summary_df.attrs["reco_time"] = delta
 
     # append datetime to the filename to avoid accidentally overwriting previous reco job's output
     time_str = datetime.datetime.now().strftime("%m_%d_%Y-%H_%M_%S")
