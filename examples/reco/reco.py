@@ -161,6 +161,32 @@ def fit_events(
     return outputs
 
 
+def fit_event(
+    event,
+    ctrl_addr,
+    init_range,
+    search_limits,
+    n_live_points,
+    conf_timeout=60000,
+    spherical_indices=[[4, 5]],
+    max_iter=10000,
+    batch_size=12,
+):
+    """wrapper around fit_events to fit a single event"""
+    return fit_events(
+        [event],
+        0,
+        [ctrl_addr],
+        init_range,
+        search_limits,
+        n_live_points,
+        conf_timeout,
+        spherical_indices,
+        max_iter,
+        batch_size,
+    )[0]
+
+
 def start_service(params, ctrl_addr, req_addr, gpu):
     # use a single GPU
     import os
@@ -248,12 +274,16 @@ def main():
     service_conf = conf["service_conf"]
 
     # add hit_data, evt_data keys based on the networks being used
-    # for now, support domnet and chargenet
+
     for event in events:
         event["hit_data"] = event["hits"][:, : service_conf["n_hit_features"]]
 
         if "domnet_file" in service_conf:
             event["evt_data"] = event["doms"][allowed_DOMs]
+        elif "stringnet_file" in service_conf:
+            event["evt_data"] = event["strings"]
+        elif "layernet_file" in service_conf:
+            event["evt_data"] = event["layers"]
         else:
             event["evt_data"] = event["total_charge"]
 
