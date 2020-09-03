@@ -334,13 +334,14 @@ def load_events(dir='/home/iwsatlas1/peller/work/oscNext/level7_v01.04/140000_i3
 
     total_charge, params, labels = load_charges(dir=dir, labels=labels, dtype=dtype)
 
-    string_charges, _, _ = load_strings(dir=dir, labels=labels, geo=geo, dtype=dtype)
-
-    string_charges = string_charges.reshape(len(total_charge), 86, -1)
+    #string_charges, _, _ = load_strings(dir=dir, labels=labels, geo=geo, dtype=dtype)
+    #string_charges = string_charges.reshape(len(total_charge), 86, -1)
     
-    layer_charges, _, _ = load_layers(dir=dir, labels=labels, geo=geo, dtype=dtype, n_layers=60)
-
-    layer_charges = layer_charges.reshape(len(total_charge), 60, -1)
+    #layer_charges, _, _ = load_layers(dir=dir, labels=labels, geo=geo, dtype=dtype, n_layers=60)
+    #layer_charges = layer_charges.reshape(len(total_charge), 60, -1)
+    
+    dom_charges, _, _ = load_doms(dir=dir, labels=labels, geo=geo, dtype=dtype)
+    dom_charges = dom_charges.reshape(len(total_charge), 5160, -1)
 
     reco_params = {}
     for r,f in recos.items():
@@ -375,8 +376,9 @@ def load_events(dir='/home/iwsatlas1/peller/work/oscNext/level7_v01.04/140000_i3
         event['total_charge'] = total_charge[i]
         event['hits'] = single_hits[hits_idx[i]['start'] : hits_idx[i]['stop']]
         event['params'] = params[i]
-        event['strings'] = string_charges[i]
-        event['layers'] = layer_charges[i]
+        #event['strings'] = string_charges[i]
+        #event['layers'] = layer_charges[i]
+        event['doms'] = dom_charges[i]
         for r in recos.keys():
             event[r] = reco_params[r][i]
         events.append(event)
