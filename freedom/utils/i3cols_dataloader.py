@@ -96,7 +96,8 @@ def load_doms(dir='/home/iwsatlas1/peller/work/oscNext/level7_v01.04/140000_i3co
               labels=['x', 'y', 'z', 'time', 'azimuth','zenith', 'cascade_energy', 'track_energy'],
               geo=pkg_resources.resource_filename('freedom', 'resources/geo_array.npy'),
               dtype=np.float32,
-              reduced=False):
+              reduced=False,
+              include_params=True):
     """
     Create training data for domnet, if reduced is True just uses DOMs in resources/allowed_DOMs.npy
     
@@ -139,11 +140,15 @@ def load_doms(dir='/home/iwsatlas1/peller/work/oscNext/level7_v01.04/140000_i3co
 
     doms = doms.reshape(-1, 4)
     
-    params = get_params(labels, mcprimary, mctree, mctree_idx)
+    if include_params:
+        params = get_params(labels, mcprimary, mctree, mctree_idx)
 
-    repeated_params = np.repeat(params, repeats=len(allowed_DOMs), axis=0)
+        repeated_params = np.repeat(params, repeats=len(allowed_DOMs), axis=0)
+
+        return doms, repeated_params, labels
     
-    return doms, repeated_params, labels
+    else:
+        return doms, labels
 
 def load_strings(dir='/home/iwsatlas1/peller/work/oscNext/level7_v01.04/140000_i3cols',
                  labels=['x', 'y', 'z', 'time', 'azimuth','zenith', 'cascade_energy', 'track_energy'],
@@ -313,7 +318,8 @@ def load_events(dir='/home/iwsatlas1/peller/work/oscNext/level7_v01.04/140000_i3
               labels=['x', 'y', 'z', 'time', 'azimuth','zenith', 'cascade_energy', 'track_energy'],
               geo=pkg_resources.resource_filename('freedom', 'resources/geo_array.npy'),
               recos = {},
-              dtype=np.float32):
+              dtype=np.float32,
+              include_doms=True):
     """
     Create event=by=event data for hit and charge net
     
@@ -340,9 +346,11 @@ def load_events(dir='/home/iwsatlas1/peller/work/oscNext/level7_v01.04/140000_i3
     #layer_charges, _, _ = load_layers(dir=dir, labels=labels, geo=geo, dtype=dtype, n_layers=60)
     #layer_charges = layer_charges.reshape(len(total_charge), 60, -1)
     
-    dom_charges, _, _ = load_doms(dir=dir, labels=labels, geo=geo, dtype=dtype)
-    dom_charges = dom_charges.reshape(len(total_charge), 5160, -1)
-
+    if include_doms:
+        dom_charges, _ = load_doms(dir=dir, labels=labels, 
+                                   geo=geo, dtype=dtype, include_params=False)
+        dom_charges = dom_charges.reshape(len(total_charge), 5160, -1)
+        
     reco_params = {}
     for r,f in recos.items():
         reco = np.load(os.path.join(dir, f, 'data.npy'))
@@ -378,7 +386,8 @@ def load_events(dir='/home/iwsatlas1/peller/work/oscNext/level7_v01.04/140000_i3
         event['params'] = params[i]
         #event['strings'] = string_charges[i]
         #event['layers'] = layer_charges[i]
-        event['doms'] = dom_charges[i]
+        if include_doms:
+            event['doms'] = dom_charges[i]
         for r in recos.keys():
             event[r] = reco_params[r][i]
         events.append(event)
