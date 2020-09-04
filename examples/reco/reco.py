@@ -7,14 +7,15 @@ Provides a main() function to drive a reconstruction job
 __author__ = "Aaron Fienberg"
 
 import argparse
-import itertools
 import pickle
 import math
 import time
 import json
 import datetime
 import pkg_resources
+import functools
 import sys
+
 
 from multiprocessing import Process, Pool
 
@@ -124,9 +125,7 @@ def fit_events(
     search_limits,
     n_live_points,
     conf_timeout=60000,
-    spherical_indices=[[4, 5]],
-    max_iter=10000,
-    batch_size=12,
+    **sph_opt_kwargs,
 ):
     rng = np.random.default_rng()
 
@@ -144,9 +143,7 @@ def fit_events(
             init_range,
             out_of_bounds,
             n_live_points=n_live_points,
-            spherical_indices=spherical_indices,
-            max_iter=max_iter,
-            batch_size=batch_size,
+            **sph_opt_kwargs,
         )
 
         true_param_llh = client.eval_llh(
@@ -168,9 +165,7 @@ def fit_event(
     search_limits,
     n_live_points,
     conf_timeout=60000,
-    spherical_indices=[[4, 5]],
-    max_iter=10000,
-    batch_size=12,
+    **sph_opt_kwargs,
 ):
     """wrapper around fit_events to fit a single event"""
     return fit_events(
@@ -181,9 +176,7 @@ def fit_event(
         search_limits,
         n_live_points,
         conf_timeout,
-        spherical_indices,
-        max_iter,
-        batch_size,
+        **sph_opt_kwargs,
     )[0]
 
 
@@ -347,20 +340,23 @@ def main():
     init_range = np.array(conf["init_range"])
     param_search_limits = np.array(conf["param_search_limits"]).T
     n_live_points = conf["n_live_points"]
+    conf_timeout = conf["conf_timeout"]
+    sph_opt_kwargs = conf["spherical_opt_conf"]
+
+    # fit events partial that fixes common parameters
+    fit_events_partial = functools.partial(
+        fit_events,
+        ctrl_addrs=ctrl_addrs,
+        init_range=init_range,
+        search_limits=param_search_limits,
+        n_live_points=n_live_points,
+        conf_timeout=conf_timeout,
+        **sph_opt_kwargs,
+    )
 
     start = time.time()
     with Pool(pool_size) as p:
-        outs = p.starmap(
-            fit_events,
-            zip(
-                evt_splits,
-                worker_gpu_inds,
-                itertools.repeat(ctrl_addrs),
-                itertools.repeat(init_range),
-                itertools.repeat(param_search_limits),
-                itertools.repeat(n_live_points),
-            ),
-        )
+        outs = p.starmap(fit_events_partial, zip(evt_splits, worker_gpu_inds),)
     delta = time.time() - start
     print(f"reconstructing {evts_to_process} events took: {delta/60:.1f} minutes")
 

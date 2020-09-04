@@ -51,5 +51,14 @@
                            [1, 100],
                            [0.1, 100]],
     
+    "conf_timeout": 60000,
+
+    "spherical_opt_conf" : {
+        "spherical_indices": [[4, 5]],
+        "max_iter": 10000,
+        "batch_size": 12,
+        "fstdthresh": 0.1
+    },
+
     "outfile_name" : "domnet_reco"
 }
