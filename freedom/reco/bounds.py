@@ -42,4 +42,4 @@ def out_of_bounds_replace(llhs, params, out_of_bounds):
 
 def invalid_replace(llhs, params, out_of_bounds):
     """combines out of bounds replace and nan replace"""
-    return out_of_bounds_replace(nan_replace(llhs), params, out_of_bounds_replace)
+    return out_of_bounds_replace(nan_replace(llhs), params, out_of_bounds)

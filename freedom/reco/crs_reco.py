@@ -29,7 +29,7 @@ from freedom.llh_service.llh_service import LLHService
 from freedom.utils import i3cols_dataloader
 
 from freedom.reco import bounds
-from freedom.reco import build_summary_df
+from freedom.reco import summary_df
 from freedom.reco import prefit
 
 
@@ -39,7 +39,7 @@ def get_batch_closure(client, event, out_of_bounds):
     evt_data = event["evt_data"]
 
     def eval_llh(params):
-        llhs = client.eval_llh(hit_data, evt_data, params)
+        llhs = np.atleast_1d(client.eval_llh(hit_data, evt_data, params))
 
         return bounds.invalid_replace(llhs, params, out_of_bounds)
 
@@ -302,18 +302,18 @@ def main():
 
     print("\nSaving summary dataframe\n")
     # build summary df
-    summary_df = summary_df.build_summary_df(all_outs, conf["par_names"])
+    df = summary_df.build_summary_df(all_outs, conf["par_names"])
     # store some metadata
-    summary_df.attrs["reco_conf"] = conf
-    summary_df.attrs["reco_time"] = delta
+    df.attrs["reco_conf"] = conf
+    df.attrs["reco_time"] = delta
     if i3cols_dirname is not None:
-        summary_df.attrs["i3cols_dirname"] = i3cols_dirname
+        df.attrs["i3cols_dirname"] = i3cols_dirname
 
     # append datetime to the filename to avoid accidentally overwriting previous reco job's output
     time_str = datetime.datetime.now().strftime("%m_%d_%Y-%H_%M_%S")
     outf_name = conf.get("outfile_name", "reco_out")
     outf_name = f"{outf_name}_{time_str}.pkl"
-    summary_df.to_pickle(outf_name)
+    df.to_pickle(outf_name)
 
     print("Killing the LLH services")
 
