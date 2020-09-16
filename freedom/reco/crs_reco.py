@@ -1,7 +1,7 @@
 """
-functions used for FreeDOM reconstruction
+Fitting functions for CRS2-based FreeDOM event reconstruction 
 
-Provides a main() function to drive a reconstruction job
+Also provides a main() function to drive a CRS2-based reconstruction job 
 """
 
 __author__ = "Aaron Fienberg"
@@ -16,12 +16,9 @@ import pkg_resources
 import functools
 import sys
 
-
 from multiprocessing import Process, Pool
 
 import numpy as np
-
-import pandas as pd
 
 import zmq
 
@@ -31,73 +28,42 @@ from freedom.llh_service.llh_client import LLHClient
 from freedom.llh_service.llh_service import LLHService
 from freedom.utils import i3cols_dataloader
 
-NAN_REPLACE_VAL = 1e10
-
-
-def get_out_of_bounds_func(limits):
-    """returns func returning a boolean array, True for param rows that are out of bounds"""
-
-    def out_of_bounds(params):
-        return ~np.alltrue(
-            np.logical_and(limits[0] <= params, params <= limits[1]), axis=-1
-        )
-
-    return out_of_bounds
-
-
-def nan_replace(nll):
-    # replace nans with valid, large values
-    nll[np.isnan(nll)] = NAN_REPLACE_VAL
-    return nll
+from freedom.reco import bounds
+from freedom.reco import build_summary_df
+from freedom.reco import prefit
 
 
 def get_batch_closure(client, event, out_of_bounds):
+    """returns LLH batch eval closure for this event. The closure is a function of one argument: the hypotheses to evaluate"""
     hit_data = event["hit_data"]
     evt_data = event["evt_data"]
 
     def eval_llh(params):
         llhs = client.eval_llh(hit_data, evt_data, params)
 
-        llhs = np.atleast_1d(llhs)
-
-        llhs = nan_replace(llhs)
-
-        llhs[out_of_bounds(params)] = NAN_REPLACE_VAL
-
-        return llhs
+        return bounds.invalid_replace(llhs, params, out_of_bounds)
 
     return eval_llh
 
 
-def initial_box(hits, init_range, charge_ind=4, n_params=8):
-    """ returns initial box limits for each dimension
-    in the form of a n_params x 2 table
-    """
-
-    # charge weighted positions, time
-    hit_avgs = np.average(hits, weights=hits[:, charge_ind], axis=0)[:4]
-
-    limits = np.empty((n_params, 2), np.float32)
-
-    # x, y, z, t range from average + init_range[0] to average + init_range[1]
-    limits[:4] = hit_avgs[:4, np.newaxis] + init_range[:4]
-
-    # angles and energies just span the specified ranges
-    # (although the energy parameters are log energies)
-    limits[4:] = init_range[4:]
-
-    return limits
-
-
 def batch_crs_fit(
-    event, client, rng, init_range, out_of_bounds, n_live_points, **sph_opt_kwargs
+    event,
+    client,
+    rng,
+    init_range,
+    search_limits,
+    n_live_points,
+    bounds_check_type="cube",
+    **sph_opt_kwargs,
 ):
+
+    out_of_bounds = bounds.get_out_of_bounds_func(search_limits, bounds_check_type)
 
     eval_llh = get_batch_closure(client, event, out_of_bounds)
 
     n_params = len(init_range)
 
-    box_limits = initial_box(event["hit_data"], init_range, n_params=n_params)
+    box_limits = prefit.initial_box(event["hit_data"], init_range, n_params=n_params)
 
     uniforms = rng.uniform(size=(n_live_points, n_params))
 
@@ -124,16 +90,15 @@ def fit_events(
     init_range,
     search_limits,
     n_live_points,
+    random_seed=None,
     conf_timeout=60000,
     **sph_opt_kwargs,
 ):
-    rng = np.random.default_rng()
+    rng = np.random.default_rng(random_seed)
 
     outputs = []
 
     client = LLHClient(ctrl_addr=ctrl_addrs[index], conf_timeout=conf_timeout)
-
-    out_of_bounds = get_out_of_bounds_func(search_limits)
 
     for event in events:
         fit_res = batch_crs_fit(
@@ -141,7 +106,7 @@ def fit_events(
             client,
             rng,
             init_range,
-            out_of_bounds,
+            search_limits,
             n_live_points=n_live_points,
             **sph_opt_kwargs,
         )
@@ -203,46 +168,6 @@ def adjust_addr_string(base_str, gpu_ind):
         port_num = int(split[-1])
         return f'{":".join(split[:-1])}:{port_num + int(gpu_ind)}'
     raise RuntimeError("only tcp and ipc addresses are supported")
-
-
-def build_summary_df(all_outs, par_names):
-    n_params = len(par_names)
-
-    evt_idx = []
-    free_fit_llhs = []
-    true_param_llhs = []
-    retro_param_llhs = []
-    n_calls = []
-    n_iters = []
-    best_fit_ps = [[] for _ in range(n_params)]
-
-    for i, out in enumerate(all_outs):
-        freedom_params = out[0]["x"]
-        freedom_llh = out[0]["fun"]
-        n_calls.append(out[0]["n_calls"])
-        n_iters.append(out[0]["nit"])
-
-        evt_idx.append(i)
-        free_fit_llhs.append(freedom_llh)
-        true_param_llhs.append(out[1])
-        retro_param_llhs.append(out[2])
-
-        for p_ind, p in enumerate(freedom_params):
-            best_fit_ps[p_ind].append(p)
-
-    df_dict = dict(
-        evt_idx=evt_idx,
-        free_fit_llh=free_fit_llhs,
-        true_p_llh=true_param_llhs,
-        retro_p_llh=retro_param_llhs,
-        n_calls=n_calls,
-        n_iters=n_iters,
-    )
-
-    for p_name, p_list in zip(par_names, best_fit_ps):
-        df_dict[p_name] = p_list
-
-    return pd.DataFrame(df_dict)
 
 
 def main():
@@ -377,7 +302,7 @@ def main():
 
     print("\nSaving summary dataframe\n")
     # build summary df
-    summary_df = build_summary_df(all_outs, conf["par_names"])
+    summary_df = summary_df.build_summary_df(all_outs, conf["par_names"])
     # store some metadata
     summary_df.attrs["reco_conf"] = conf
     summary_df.attrs["reco_time"] = delta
