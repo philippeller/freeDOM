@@ -26,6 +26,8 @@ install_requires = [
     "scipy",
     "numpy",
     "pyzmq>=19.0.1",
+    "pandas",
+    "spherical_opt @ git+https://github.com/philippeller/spherical_opt.git"
 ]
 
 # handle cython extension
@@ -103,4 +105,5 @@ setup(
     zip_safe=False,
     cmdclass={"build_ext": CustomBuildExtCommand},
     ext_modules=extensions,
+    entry_points={'console_scripts': ['freedom_crs_reco = freedom.reco.crs_reco:main']}
 )
