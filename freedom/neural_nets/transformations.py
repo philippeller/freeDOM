@@ -11,7 +11,7 @@ class hitnet_trafo(tf.keras.layers.Layer):
     speed_of_light = constants.c * 1e-9 # c in m / ns
 
     
-    def __init__(self, labels, min_energy=0.1, max_energy=1e4):
+    def __init__(self, labels, min_energy=0.1, max_energy=1e4, use_pmt_dir=False):
         '''
         Parameters:
         -----------
@@ -25,6 +25,7 @@ class hitnet_trafo(tf.keras.layers.Layer):
         self.labels = labels
         self.min_energy = min_energy
         self.max_energy = max_energy
+        self.use_pmt_dir = use_pmt_dir
         
         self.azimuth_idx = labels.index('azimuth')
         self.zenith_idx = labels.index('zenith')
@@ -42,7 +43,8 @@ class hitnet_trafo(tf.keras.layers.Layer):
         
         
     def get_config(self):
-        return {'labels': self.labels, 'max_energy': self.min_energy, 'max_energy': self.max_energy}
+        return {'labels': self.labels, 'max_energy': self.min_energy, 'max_energy': self.max_energy, 
+                'use_pmt_dir': self.use_pmt_dir}
 
     def call(self, hit, params):
         '''
@@ -84,7 +86,7 @@ class hitnet_trafo(tf.keras.layers.Layer):
         
 
         costhetadir = tf.math.divide_no_nan(rho, dist)
-        sinthetadir = tf.sqrt(1 - tf.math.square(costhetadir))
+        sinthetadir = tf.sqrt(1 - tf.clip_by_value(tf.math.square(costhetadir), 0, 1)) # can produce NaN on CPU without clip
         
         # so it is 0 at the poles?
         absdeltaphidir *= sintheta * sinthetadir
@@ -98,30 +100,13 @@ class hitnet_trafo(tf.keras.layers.Layer):
         cascade_energy = tf.math.log(tf.clip_by_value(params[:, self.cascade_energy_idx], self.min_energy, self.max_energy))
         track_energy = tf.math.log(tf.clip_by_value(params[:, self.track_energy_idx], self.min_energy, self.max_energy))
         
-        out = tf.stack([
-                 delta,
-                 #delta_ice,
-                 dist,
-                 #rho,
-                 costhetadir,
-                 absdeltaphidir,
-                 dir_x,
-                 dir_y,
-                 dir_z,
-                 dx,
-                 dy,
-                 dz,
-                 hit[:,0],
-                 hit[:,1],
-                 hit[:,2],
-                 hit[:,5],
-                 hit[:,6],
-                 #hit[:,7],
-                 cascade_energy,
-                 track_energy
-                ],
-                axis=1
-                )    
+        if self.use_pmt_dir:
+            out = [delta, dist, costhetadir, absdeltaphidir, dir_x, dir_y, dir_z, dx, dy, dz, hit[:,0], hit[:,1], hit[:,2],
+                   hit[:,5], hit[:,6], hit[:,7], hit[:,8], cascade_energy, track_energy]
+        else:
+            out = [delta, dist, costhetadir, absdeltaphidir, dir_x, dir_y, dir_z, dx, dy, dz, hit[:,0], hit[:,1], hit[:,2],
+                   hit[:,5], hit[:,6], cascade_energy, track_energy]
+        out = tf.stack(out, axis=1)    
             
         return out
     
@@ -182,7 +167,7 @@ class domnet_trafo(tf.keras.layers.Layer):
         
         # distance DOM - vertex
         rho = tf.math.sqrt(tf.math.square(dx) + tf.math.square(dy))
-        dist = tf.math.sqrt(tf.math.square(dx) + tf.math.square(dy) + tf.math.square(dz))     
+        dist = tf.math.sqrt(tf.math.square(dx) + tf.math.square(dy) + tf.math.square(dz))
         
         absdeltaphidir = tf.abs(tf.math.acos(
                                 tf.clip_by_value(-tf.math.divide_no_nan((cosphi*dx + sinphi*dy), rho),
@@ -193,7 +178,7 @@ class domnet_trafo(tf.keras.layers.Layer):
                                 )
 
         costhetadir = tf.math.divide_no_nan(rho, dist)
-        sinthetadir = tf.sqrt(1 - tf.math.square(costhetadir))
+        sinthetadir = tf.sqrt(1 - tf.clip_by_value(tf.math.square(costhetadir), 0, 1)) # can produce NaN on CPU without clip
         
         # so it is 0 at the poles?
         absdeltaphidir *= sintheta * sinthetadir
@@ -207,7 +192,6 @@ class domnet_trafo(tf.keras.layers.Layer):
                  dom[:,2],
                  dom[:,3],
                  dist,
-                 #rho ?,
                  costhetadir,
                  absdeltaphidir,
                  dir_x,

@@ -155,6 +155,8 @@ class DataGenerator(tf.keras.utils.Sequence):
                  dirs=['/home/iwsatlas1/peller/work/oscNext/level7_v01.04/140000_i3cols'], 
                  labels=['x', 'y', 'z', 'time', 'azimuth','zenith', 'cascade_energy', 'track_energy'],
                  batch_size=4096,
+                 pulses='SRTTWOfflinePulsesDC',
+                 geo=pkg_resources.resource_filename('freedom', 'resources/geo_array.npy'),
                  reduced=False,
                 ):
         
@@ -164,7 +166,7 @@ class DataGenerator(tf.keras.utils.Sequence):
             if reduced:
                 data, params, _ = func(dir=dir, labels=labels, reduced=True)
             else:
-                data, params, _ = func(dir=dir, labels=labels)
+                data, params, _ = func(dir=dir, labels=labels, pulses=pulses, geo=geo)
             
             if i == 0:
                 self.data = data
@@ -233,7 +235,7 @@ class DataGenerator(tf.keras.utils.Sequence):
         
         return a[p], b[p], c[p]
 
-class DataGenerator_HitNet(tf.keras.utils.Sequence):
+class DataGenerator_HitNet(tf.keras.utils.Sequence): #for in-DOM shuffling
     def __init__(self, 
                  dirs=['/home/iwsatlas1/peller/work/oscNext/level7_v01.04/140000_i3cols'], 
                  labels=['x', 'y', 'z', 'time', 'azimuth','zenith', 'cascade_energy', 'track_energy'],
@@ -306,7 +308,7 @@ class DataGenerator_HitNet(tf.keras.utils.Sequence):
         
         return a[p], b[p], c[p]
     
-class DataGenerator_DOMNet(tf.keras.utils.Sequence):
+class DataGenerator_DOMNet(tf.keras.utils.Sequence): #needs less mem
     def __init__(self, 
                  dirs=['/home/iwsatlas1/peller/work/oscNext/level7_v01.04/140000_i3cols'], 
                  labels=['x', 'y', 'z', 'time', 'azimuth','zenith', 'cascade_energy', 'track_energy'],
@@ -359,14 +361,15 @@ class DataGenerator_DOMNet(tf.keras.utils.Sequence):
         # generate data for some batches
         if index%self.container_size == 0:
             indexes = self.indexes[index*self.batch_size:(index+self.container_size)*self.batch_size]
-            self.X_container, self.T_container, self.y_container = self.__data_generation(indexes)
+            self.X_container, self.T_container, self.y_container, self.w_container = self.__data_generation(indexes) #
         
         start = (index%self.container_size)*self.batch_size*2*len(self.allowed_DOMs)
         stop = (index%self.container_size+1)*self.batch_size*2*len(self.allowed_DOMs)
         X = [self.X_container[start:stop], self.T_container[start:stop]]
         y = self.y_container[start:stop]
+        w = self.w_container[start:stop]
 
-        return X, y
+        return X, y, w
 
     def on_epoch_end(self):
         'Updates indexes after each epoch'
@@ -394,8 +397,10 @@ class DataGenerator_DOMNet(tf.keras.utils.Sequence):
 
         d_X, d_T, d_labels = shuffle(d_X, d_T, d_labels)
         #R = np.roll(self.random_state, np.random.randint(len(d_X)))[:2*len(indexes_temp)*len(self.allowed_DOMs)]
+        
+        weights = np.clip((d_T[:, 6] + d_T[:, 7])/5, 1, 20)
 
-        return d_X, d_T, d_labels
+        return d_X, d_T, d_labels, weights
     
     def load_doms(self, hits_idx, hits, Nevents):
         doms = self.doms_blank.copy()[:Nevents]
