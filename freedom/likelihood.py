@@ -176,6 +176,7 @@ class upgrade_LLH():
                  DOM_chargenet_file=None,
                  mDOM_chargenet_file=None,
                  DEgg_chargenet_file=None,
+                 all_chargenet_file=None,
                  chargenet_batchsize=4096,
                  hitnet_batchsize=4096,
                  ):
@@ -226,6 +227,13 @@ class upgrade_LLH():
             self.DEgg_chargenet.compile()
         else:
             self.DEgg_chargenet = None
+            
+        if all_chargenet_file is not None:
+            self.all_chargenet = tf.keras.models.load_model(all_chargenet_file, custom_objects={'chargenet_trafo':chargenet_trafo})
+            self.all_chargenet.layers[-1].activation = tf.keras.activations.linear
+            self.all_chargenet.compile()
+        else:
+            self.all_chargenet = None
         
         self.chargenet_batchsize = chargenet_batchsize
         self.hitnet_batchsize = hitnet_batchsize
@@ -272,6 +280,13 @@ class upgrade_LLH():
             charge_llh_DEgg = -self.DEgg_chargenet.predict(inputs, batch_size=self.chargenet_batchsize)[:, 0]
         else:
             charge_llh_DEgg = 0.
+            
+        if self.all_chargenet is not None:
+            inp = np.stack([event['total_charge_DOM'], event['total_charge_mDOM'], event['total_charge_DEgg']]).reshape(6)
+            inputs = [np.repeat(inp[np.newaxis, :], repeats=n_points, axis=0), params]
+            charge_llh_all = -self.all_chargenet.predict(inputs, batch_size=self.chargenet_batchsize)[:, 0]
+        else:
+            charge_llh_all = 0.
 
         # Hit Nets
         hits = event['hits_DOM']
@@ -331,4 +346,4 @@ class upgrade_LLH():
         total_llh_DEgg = all_hits_llh_DEgg + charge_llh_DEgg
         total_llh = total_llh_DOM + total_llh_mDOM + total_llh_DEgg
 
-        return total_llh, total_llh_DOM, total_llh_mDOM, total_llh_DEgg
+        return total_llh, total_llh_DOM, total_llh_mDOM, total_llh_DEgg, charge_llh_all

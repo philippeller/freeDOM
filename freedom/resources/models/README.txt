@@ -6,6 +6,10 @@ ChargeNet_flat_24_Sep_2020-07h48
     minimizer&activation: adam&relu
     trained on set: 149999 flat
     special notes:
+ChargeNet_upgrade
+    minimizer&activation: adam&relu
+    trained on set: upgrade
+    special notes:
 
 DOMNet_26_Jun_2020-16h49
     minimizer&activation: adam&relu
@@ -43,11 +47,15 @@ Hitnet_ranger_14_Jul_2020-08h03
 HitNet_ranger_30_Jul_2020-15h49
     minimizer&activation: ranger&mish
     trained on set: train
-    special notes: new shuffleing (just "in DOM")
+    special notes: new shuffling (just "in DOM")
 HitNet_ranger_total_flat_23_Sep_2020-17h47
     minimizer&activation: ranger&mish
     trained on set: 149999 flat
     special notes:
+HitNet_upgrade
+    minimizer&activation: ranger&mish
+    trained on set: upgrade
+    special notes: free shuffling, 2nd generation gets cos_pmtd and cos_dird instead of pmt dir angles
     
 LayerNet_05_Jun_2020-10h18
     minimizer&activation: adam&relu
