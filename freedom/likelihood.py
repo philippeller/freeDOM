@@ -146,7 +146,6 @@ class LLH():
 
         # Hit Net
         hits = event['hits']
-        #hits = hits[np.isin(hits[:, 7]*60 + hits[:, 8], self.allowed_DOMs, assume_unique=True)]
         n_hits = hits.shape[0]
 
         if n_hits > 0:
@@ -167,3 +166,184 @@ class LLH():
         total_llh = all_hits_llh + charge_llh
 
         return total_llh, charge_llh, all_hits_llh, charge_llhs, single_hit_llhs#.T
+
+
+class upgrade_LLH():
+    def __init__(self,
+                 DOM_hitnet_file=None,
+                 mDOM_hitnet_file=None,
+                 DEgg_hitnet_file=None,
+                 DOM_chargenet_file=None,
+                 mDOM_chargenet_file=None,
+                 DEgg_chargenet_file=None,
+                 all_chargenet_file=None,
+                 chargenet_batchsize=4096,
+                 hitnet_batchsize=4096,
+                 ):
+        '''
+        *net_file : str
+            location of * model hdf5 file
+        *net_batchsize : int
+        '''
+
+        if DOM_hitnet_file is not None:
+            self.DOM_hitnet = tf.keras.models.load_model(DOM_hitnet_file, custom_objects={'hitnet_trafo':hitnet_trafo})
+            self.DOM_hitnet.layers[-1].activation = tf.keras.activations.linear
+            self.DOM_hitnet.compile()
+        else:
+            self.DOM_hitnet = None
+
+        if mDOM_hitnet_file is not None:
+            self.mDOM_hitnet = tf.keras.models.load_model(mDOM_hitnet_file, custom_objects={'hitnet_trafo':hitnet_trafo})
+            self.mDOM_hitnet.layers[-1].activation = tf.keras.activations.linear
+            self.mDOM_hitnet.compile()
+        else:
+            self.mDOM_hitnet = None
+            
+        if DEgg_hitnet_file is not None:
+            self.DEgg_hitnet = tf.keras.models.load_model(DEgg_hitnet_file, custom_objects={'hitnet_trafo':hitnet_trafo})
+            self.DEgg_hitnet.layers[-1].activation = tf.keras.activations.linear
+            self.DEgg_hitnet.compile()
+        else:
+            self.DEgg_hitnet = None
+            
+        if DOM_chargenet_file is not None:
+            self.DOM_chargenet = tf.keras.models.load_model(DOM_chargenet_file, custom_objects={'chargenet_trafo':chargenet_trafo})
+            self.DOM_chargenet.layers[-1].activation = tf.keras.activations.linear
+            self.DOM_chargenet.compile()
+        else:
+            self.DOM_chargenet = None
+            
+        if mDOM_chargenet_file is not None:
+            self.mDOM_chargenet = tf.keras.models.load_model(mDOM_chargenet_file, custom_objects={'chargenet_trafo':chargenet_trafo})
+            self.mDOM_chargenet.layers[-1].activation = tf.keras.activations.linear
+            self.mDOM_chargenet.compile()
+        else:
+            self.mDOM_chargenet = None
+            
+        if DEgg_chargenet_file is not None:
+            self.DEgg_chargenet = tf.keras.models.load_model(DEgg_chargenet_file, custom_objects={'chargenet_trafo':chargenet_trafo})
+            self.DEgg_chargenet.layers[-1].activation = tf.keras.activations.linear
+            self.DEgg_chargenet.compile()
+        else:
+            self.DEgg_chargenet = None
+            
+        if all_chargenet_file is not None:
+            self.all_chargenet = tf.keras.models.load_model(all_chargenet_file, custom_objects={'chargenet_trafo':chargenet_trafo})
+            self.all_chargenet.layers[-1].activation = tf.keras.activations.linear
+            self.all_chargenet.compile()
+        else:
+            self.all_chargenet = None
+        
+        self.chargenet_batchsize = chargenet_batchsize
+        self.hitnet_batchsize = hitnet_batchsize
+        
+    def __call__(self, event, params):
+        """Evaluate LLH for a given event + params
+
+        event : dict containing:
+            'total_charge' : array
+            'hits' : array shape (n_hits, 5)
+                each row is (x, y, z) DOM poitions, time, charge, LC flag, ATWD flag
+        params : ndarray
+            shape (n_likelihood_points, len(labels)) 
+
+        
+        Returns:
+        --------
+        total_llh : ndarray
+        charge_llh : ndarray
+        all_hits_llh : ndarray
+        single_hit_llhs : ndarray
+
+        """
+
+        if params.ndim == 1:
+            params = np.array([params])
+        n_points = params.shape[0]    
+
+        # Charge Parts
+        if self.DOM_chargenet is not None:
+            inputs = [np.repeat(event['total_charge_DOM'][np.newaxis, :], repeats=n_points, axis=0), params]
+            charge_llh_DOM = -self.DOM_chargenet.predict(inputs, batch_size=self.chargenet_batchsize)[:, 0]
+        else:
+            charge_llh_DOM = 0.
+        
+        if self.mDOM_chargenet is not None:
+            inputs = [np.repeat(event['total_charge_mDOM'][np.newaxis, :], repeats=n_points, axis=0), params]
+            charge_llh_mDOM = -self.mDOM_chargenet.predict(inputs, batch_size=self.chargenet_batchsize)[:, 0]
+        else:
+            charge_llh_mDOM = 0.
+            
+        if self.DEgg_chargenet is not None:
+            inputs = [np.repeat(event['total_charge_DEgg'][np.newaxis, :], repeats=n_points, axis=0), params]
+            charge_llh_DEgg = -self.DEgg_chargenet.predict(inputs, batch_size=self.chargenet_batchsize)[:, 0]
+        else:
+            charge_llh_DEgg = 0.
+            
+        if self.all_chargenet is not None:
+            inp = np.stack([event['total_charge_DOM'], event['total_charge_mDOM'], event['total_charge_DEgg']]).reshape(6)
+            inputs = [np.repeat(inp[np.newaxis, :], repeats=n_points, axis=0), params]
+            charge_llh_all = -self.all_chargenet.predict(inputs, batch_size=self.chargenet_batchsize)[:, 0]
+        else:
+            charge_llh_all = 0.
+
+        # Hit Nets
+        hits = event['hits_DOM']
+        n_hits = hits.shape[0]
+        if n_hits > 0 and self.DOM_hitnet is not None:
+            hit_charges = hits[:, 4]
+
+            inputs = []
+            inputs.append(np.repeat(hits[:, np.newaxis, :], repeats=n_points, axis=1).reshape(n_hits * n_points, -1))
+            inputs.append(np.repeat(params[np.newaxis, :], repeats=n_hits, axis=0).reshape(n_hits * n_points, -1))
+
+            single_hit_llhs_DOM = -self.DOM_hitnet.predict(inputs, batch_size=self.hitnet_batchsize).reshape(n_hits, n_points)
+
+            all_hits_llh_DOM = hit_charges @ single_hit_llhs_DOM
+
+        else:
+            single_hit_llhs_DOM = np.array([])
+            all_hits_llh_DOM = 0.
+            
+        hits = event['hits_mDOM']
+        n_hits = hits.shape[0]
+        if n_hits > 0 and self.mDOM_hitnet is not None:
+            hit_charges = hits[:, 4]
+
+            inputs = []
+            inputs.append(np.repeat(hits[:, np.newaxis, :], repeats=n_points, axis=1).reshape(n_hits * n_points, -1))
+            inputs.append(np.repeat(params[np.newaxis, :], repeats=n_hits, axis=0).reshape(n_hits * n_points, -1))
+
+            single_hit_llhs_mDOM = -self.mDOM_hitnet.predict(inputs, batch_size=self.hitnet_batchsize).reshape(n_hits, n_points)
+
+            all_hits_llh_mDOM = hit_charges @ single_hit_llhs_mDOM
+
+        else:
+            single_hit_llhs_mDOM = np.array([])
+            all_hits_llh_mDOM = 0.
+            
+        hits = event['hits_DEgg']
+        n_hits = hits.shape[0]
+        if n_hits > 0 and self.DEgg_hitnet is not None:
+            hit_charges = hits[:, 4]
+
+            inputs = []
+            inputs.append(np.repeat(hits[:, np.newaxis, :], repeats=n_points, axis=1).reshape(n_hits * n_points, -1))
+            inputs.append(np.repeat(params[np.newaxis, :], repeats=n_hits, axis=0).reshape(n_hits * n_points, -1))
+
+            single_hit_llhs_DEgg = -self.DEgg_hitnet.predict(inputs, batch_size=self.hitnet_batchsize).reshape(n_hits, n_points)
+
+            all_hits_llh_DEgg = hit_charges @ single_hit_llhs_DEgg
+
+        else:
+            single_hit_llhs_DEgg = np.array([])
+            all_hits_llh_DEgg = 0.
+
+        
+        total_llh_DOM = all_hits_llh_DOM + charge_llh_DOM
+        total_llh_mDOM = all_hits_llh_mDOM + charge_llh_mDOM
+        total_llh_DEgg = all_hits_llh_DEgg + charge_llh_DEgg
+        total_llh = total_llh_DOM + total_llh_mDOM + total_llh_DEgg
+
+        return total_llh, total_llh_DOM, total_llh_mDOM, total_llh_DEgg, charge_llh_all

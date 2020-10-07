@@ -149,29 +149,40 @@ class Data():
 #         return prefetched
 
 
-class DataGenerator(tf.keras.utils.Sequence):
+class DataGenerator(tf.keras.utils.Sequence): # for HitNet and (total) ChargeNet
     def __init__(self, 
                  func, # e.g. load_hits
                  dirs=['/home/iwsatlas1/peller/work/oscNext/level7_v01.04/140000_i3cols'], 
                  labels=['x', 'y', 'z', 'time', 'azimuth','zenith', 'cascade_energy', 'track_energy'],
                  batch_size=4096,
-                 reduced=False,
+                 pulses='SRTTWOfflinePulsesDC',
+                 geo=pkg_resources.resource_filename('freedom', 'resources/geo_array.npy'),
+                 shuffle='free'
                 ):
+        
+        if func == load_charges:
+            assert shuffle == 'free', "Only free shuffling for total charges."
+        elif func == load_hits:
+            assert shuffle in ['free', 'inDOM'], "Choose either 'free' or 'inDOM' shuffling."
+            assert type(pulses) == str, "Use just one type of pulses for HitNet."
+        else:
+            raise NameError("Currently DataGenerator just supports 'load_hits' and 'load_charges'. 'load_doms' has its own DataGenerator class.")
         
         self.batch_size = int(batch_size/2) # half true labels half false labels
         self.labels = labels
         for i, dir in enumerate(dirs):
-            if reduced:
-                data, params, _ = func(dir=dir, labels=labels, reduced=True)
-            else:
-                data, params, _ = func(dir=dir, labels=labels)
-            
+            data, params, _ = func(dir=dir, labels=labels, pulses=pulses, geo=geo)
             if i == 0:
                 self.data = data
                 self.params = params
             else:
                 self.data = np.append(self.data, data, axis=0)
                 self.params = np.append(self.params, params, axis=0)
+        
+        if shuffle == 'inDOM':
+            self.shuffle_params_inDOM()
+        else:
+            self.shuffled_params = None
         
         self.indexes = np.arange(len(self.data))
         self.on_epoch_end()
@@ -208,75 +219,12 @@ class DataGenerator(tf.keras.utils.Sequence):
     def on_epoch_end(self):
         'Updates indexes after each epoch'
         np.random.shuffle(self.indexes) # mix between batches
-
-    def __data_generation(self, indexes_temp):
-        'Generates data containing batch_size samples'
-        # Generate data similar to Data.get_dataset()
-        x = np.take(self.data, indexes_temp, axis=0)
-        t = np.take(self.params, indexes_temp, axis=0)
-
-        d_true_labels = np.ones((self.batch_size, 1), dtype=x.dtype)
-        d_false_labels = np.zeros((self.batch_size, 1), dtype=x.dtype)
         
-        d_X = np.append(x, x, axis=0)
-        d_T = np.append(t, np.random.permutation(t), axis=0)
-        d_labels = np.append(d_true_labels, d_false_labels)
-        
-        d_X, d_T, d_labels = self.unison_shuffled_copies(d_X, d_T, d_labels)
-
-        return [d_X, d_T], d_labels
-    
-    def unison_shuffled_copies(self, a, b, c):
-        'Shuffles arrays in the same way'
-        assert len(a) == len(b) == len(c)
-        p = np.random.permutation(len(a))
-        
-        return a[p], b[p], c[p]
-
-class DataGenerator_HitNet(tf.keras.utils.Sequence):
-    def __init__(self, 
-                 dirs=['/home/iwsatlas1/peller/work/oscNext/level7_v01.04/140000_i3cols'], 
-                 labels=['x', 'y', 'z', 'time', 'azimuth','zenith', 'cascade_energy', 'track_energy'],
-                 batch_size=4096,
-                ):
-        
-        self.batch_size = int(batch_size/2) # half true labels half false labels
-        self.labels = labels
-        for i, dir in enumerate(dirs):
-            data, params, _ = load_hits(dir=dir, labels=labels)
-            if i == 0:
-                self.data = data
-                self.params = params
-            else:
-                self.data = np.append(self.data, data, axis=0)
-                self.params = np.append(self.params, params, axis=0)
-        self.shuffle_params()
-        
-        self.indexes = np.arange(len(self.data))
-        self.on_epoch_end()
-
-    def __len__(self):
-        'Denotes the number of batches per epoch'
-        return int(np.floor(len(self.data) / self.batch_size))
-
-    def __getitem__(self, index):
-        # Generate indexes of the batch
-        indexes = self.indexes[index*self.batch_size:(index+1)*self.batch_size]
-
-        # Generate data
-        X, y = self.__data_generation(indexes)
-
-        return X, y
-
-    def on_epoch_end(self):
-        'Updates indexes after each epoch'
-        np.random.shuffle(self.indexes) # mix between batches
-        
-    def shuffle_params(self):
+    def shuffle_params_inDOM(self):
         shuffled_params = np.empty_like(self.params)
-        u,c = np.unique(self.data[:, 7], return_counts=True)
+        u,c = np.unique(self.data[:, 10], return_counts=True)
         for DOM_index in u[c>1]:
-            mask = self.data[:, 7] == DOM_index
+            mask = self.data[:, 10] == DOM_index
             shuffled_params[mask] = np.random.permutation(self.params[mask])
         
         self.shuffled_params = shuffled_params
@@ -286,7 +234,10 @@ class DataGenerator_HitNet(tf.keras.utils.Sequence):
         # Generate data similar to Data.get_dataset()
         x = np.take(self.data, indexes_temp, axis=0)
         t = np.take(self.params, indexes_temp, axis=0)
-        tr = np.take(self.shuffled_params, indexes_temp, axis=0)
+        if self.shuffled_params == None:
+            tr = np.random.permutation(t)
+        else:
+            tr = np.take(self.shuffled_params, indexes_temp, axis=0)
 
         d_true_labels = np.ones((self.batch_size, 1), dtype=x.dtype)
         d_false_labels = np.zeros((self.batch_size, 1), dtype=x.dtype)
@@ -306,7 +257,7 @@ class DataGenerator_HitNet(tf.keras.utils.Sequence):
         
         return a[p], b[p], c[p]
     
-class DataGenerator_DOMNet(tf.keras.utils.Sequence):
+class DataGenerator_DOMNet(tf.keras.utils.Sequence): # for DOMNet (needs less mem)
     def __init__(self, 
                  dirs=['/home/iwsatlas1/peller/work/oscNext/level7_v01.04/140000_i3cols'], 
                  labels=['x', 'y', 'z', 'time', 'azimuth','zenith', 'cascade_energy', 'track_energy'],
@@ -359,14 +310,15 @@ class DataGenerator_DOMNet(tf.keras.utils.Sequence):
         # generate data for some batches
         if index%self.container_size == 0:
             indexes = self.indexes[index*self.batch_size:(index+self.container_size)*self.batch_size]
-            self.X_container, self.T_container, self.y_container = self.__data_generation(indexes)
+            self.X_container, self.T_container, self.y_container = self.__data_generation(indexes) #, self.w_container
         
         start = (index%self.container_size)*self.batch_size*2*len(self.allowed_DOMs)
         stop = (index%self.container_size+1)*self.batch_size*2*len(self.allowed_DOMs)
         X = [self.X_container[start:stop], self.T_container[start:stop]]
         y = self.y_container[start:stop]
+        #w = self.w_container[start:stop]
 
-        return X, y
+        return X, y#, w
 
     def on_epoch_end(self):
         'Updates indexes after each epoch'
@@ -394,8 +346,10 @@ class DataGenerator_DOMNet(tf.keras.utils.Sequence):
 
         d_X, d_T, d_labels = shuffle(d_X, d_T, d_labels)
         #R = np.roll(self.random_state, np.random.randint(len(d_X)))[:2*len(indexes_temp)*len(self.allowed_DOMs)]
+        
+        #weights = np.clip((d_T[:, 6] + d_T[:, 7])/5, 1, 20)
 
-        return d_X, d_T, d_labels
+        return d_X, d_T, d_labels#, weights
     
     def load_doms(self, hits_idx, hits, Nevents):
         doms = self.doms_blank.copy()[:Nevents]

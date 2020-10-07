@@ -3,12 +3,12 @@ import tensorflow_addons as tfa
 
 from freedom.neural_nets.transformations import hitnet_trafo
 
-def get_hitnet(labels, activation="relu"):
+def get_hitnet(labels, activation="relu", use_pmt_dir=False):
 
-    hits_input = tf.keras.Input(shape=(8,))
+    hits_input = tf.keras.Input(shape=(10,)) #8
     params_input = tf.keras.Input(shape=(len(labels),))
     
-    t = hitnet_trafo(labels=labels)
+    t = hitnet_trafo(labels=labels, use_pmt_dir=use_pmt_dir)
 
     s = t(hits_input, params_input)
     #s = tf.keras.layers.BatchNormalization()(s)
