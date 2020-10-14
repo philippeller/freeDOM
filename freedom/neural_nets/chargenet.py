@@ -2,9 +2,9 @@ import tensorflow as tf
 
 from freedom.neural_nets.transformations import chargenet_trafo
 
-def get_chargenet(labels):
+def get_chargenet(labels, n_inp=2):
 
-    charge_input = tf.keras.Input(shape=(2,))
+    charge_input = tf.keras.Input(shape=(n_inp,))
     params_input = tf.keras.Input(shape=(len(labels),))
 
     t = chargenet_trafo(labels=labels)
