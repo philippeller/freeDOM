@@ -375,11 +375,14 @@ class LLHService:
         self._evt_data_table[hypo_ind:stop_hypo_ind] = evt_data
         self._theta_table[hypo_ind:stop_hypo_ind] = thetas
 
-        # update stop indices
-        next_stop = next_ind + n_hits
-        self._stop_inds[hypo_ind : hypo_ind + batch_size] = np.arange(
-            next_stop, next_stop + n_hits * batch_size, n_hits
-        )
+        # update stop indices, handle special case of 0 hits
+        if n_hits > 0:
+            next_stop = next_ind + n_hits
+            self._stop_inds[hypo_ind : hypo_ind + batch_size] = np.arange(
+                next_stop, next_stop + n_hits * batch_size, n_hits
+            )
+        else:
+            self._stop_inds[hypo_ind : hypo_ind + batch_size] = next_ind
 
         # record work request information
         work_item_dict = dict(
