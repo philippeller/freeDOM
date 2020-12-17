@@ -9,7 +9,6 @@ from __future__ import absolute_import, division, print_function
 
 __author__ = "Aaron Fienberg"
 
-import json
 import os
 import time
 import sys
@@ -77,6 +76,7 @@ class LLHService:
         "_ctrl_sock",
         "_last_flush",
         "_client_conf",
+        "_boundary_guard",
     ]
 
     def __init__(
@@ -107,6 +107,7 @@ class LLHService:
         features_per_layer=4,
         ndoms=None,
         features_per_dom=4,
+        boundary_guard=None,
     ):
         if (chargenet_file is None) + (stringnet_file is None) + (
             domnet_file is None
@@ -120,7 +121,6 @@ class LLHService:
         self._n_table_rows = batch_size["n_observations"]
 
         self._n_hypos = batch_size["n_hypos"]
-        """number of hypotheses per batch"""
 
         self._n_hit_features = n_hit_features
         self._n_evt_features = n_evt_features
@@ -205,6 +205,11 @@ class LLHService:
         if bypass_tensorflow:
             self._eval_llh = fake_eval_llh
 
+        if boundary_guard is not None:
+            self._init_boundary_guard(**boundary_guard)
+        else:
+            self._boundary_guard = None
+
         # trace-compile the llh function in advance
         self._eval_llh(
             tf.constant(self._hit_table),
@@ -212,6 +217,7 @@ class LLHService:
             tf.constant(self._theta_table),
             tf.constant(self._stop_inds),
             self._model,
+            self._boundary_guard,
         )
 
         # convert flush period to seconds
@@ -296,6 +302,13 @@ class LLHService:
 
         self._req_sock = req_sock
         self._ctrl_sock = ctrl_sock
+
+    def _init_boundary_guard(self, file, bg_lim, invalid_llh):
+        model = tf.keras.models.load_model(file)
+        bg_lim = tf.constant(bg_lim, tf.float32)
+        invalid_llh = tf.constant(invalid_llh, tf.float32)
+
+        self._boundary_guard = dict(model=model, bg_lim=bg_lim, invalid_llh=invalid_llh)
 
     def __enter__(self):
         return self
@@ -491,7 +504,12 @@ class LLHService:
             theta_table = tf.constant(self._theta_table)
             stop_inds = tf.constant(self._stop_inds)
             llh_sums = self._eval_llh(
-                hit_data_table, evt_data_table, theta_table, stop_inds, self._model
+                hit_data_table,
+                evt_data_table,
+                theta_table,
+                stop_inds,
+                self._model,
+                self._boundary_guard,
             )
             llhs = llh_sums.numpy()
 

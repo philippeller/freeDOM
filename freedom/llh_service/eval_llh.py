@@ -6,7 +6,9 @@ import tensorflow as tf
 
 
 @tf.function
-def freedom_nllh(hit_data, evt_data, theta, stop_inds, models, charge_ind=4):
+def freedom_nllh(
+    hit_data, evt_data, theta, stop_inds, models, boundary_guard, charge_ind=4
+):
     """
     hitnet/chargenet llh calculation
 
@@ -22,8 +24,9 @@ def freedom_nllh(hit_data, evt_data, theta, stop_inds, models, charge_ind=4):
         last index of each separate event in the hit_data table
     models: tuple or list or other indexable object
         (hitnet, chargenet)
+    boundary_guard: dict
+        boundary guard dict containing the keys "model", "bg_lim", and "invalid_llh"
     """
-
     hitnet = models[0]
     chargenet = models[1]
 
@@ -55,7 +58,36 @@ def freedom_nllh(hit_data, evt_data, theta, stop_inds, models, charge_ind=4):
     )
 
     # combine hitnet and chargenet
-    return hit_llh_sums[:, 0, 0] + charge_llhs
+    base_llhs = hit_llh_sums[:, 0, 0] + charge_llhs
+
+    if boundary_guard is not None:
+        return apply_boundary_guard(base_llhs, theta, **boundary_guard)
+    else:
+        return base_llhs
+
+
+@tf.function
+def apply_boundary_guard(base_llhs, theta, model, bg_lim, invalid_llh):
+    """
+    apply the boundary guard
+
+    Parameters
+    ----------
+    base_llhs: tf.constant
+        pre boundary guard llhs
+    theta: tf.keras
+        parameters at which to evaluate the boundary guard
+    model: tf.keras.Model
+        the boundary guard model
+    bg_lim: tf.constant
+        boundary guard limit
+    invalid_llh: tf.constant
+        value returned at points where model(param) <= bg_lim
+
+    """
+    bg_vals = model(theta)[:, 0]
+
+    return tf.where(bg_vals <= bg_lim, invalid_llh, base_llhs)
 
 
 def wrap_partial_chargenet(partialnet, n_params, n_groups, features_per_group):
