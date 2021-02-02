@@ -303,12 +303,16 @@ class LLHService:
         self._req_sock = req_sock
         self._ctrl_sock = ctrl_sock
 
-    def _init_boundary_guard(self, file, bg_lim, invalid_llh):
-        model = tf.keras.models.load_model(file)
+    def _init_boundary_guard(self, file, bg_lim, invalid_llh, prior, custom_objects=None):
+        if custom_objects == None:
+            model = tf.keras.models.load_model(file)
+        else:
+            model = tf.keras.models.load_model(file, custom_objects=custom_objects)
         bg_lim = tf.constant(bg_lim, tf.float32)
         invalid_llh = tf.constant(invalid_llh, tf.float32)
+        prior = tf.constant(prior, tf.bool)
 
-        self._boundary_guard = dict(model=model, bg_lim=bg_lim, invalid_llh=invalid_llh)
+        self._boundary_guard = dict(model=model, bg_lim=bg_lim, invalid_llh=invalid_llh, prior=prior)
 
     def __enter__(self):
         return self

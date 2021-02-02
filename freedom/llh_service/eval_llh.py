@@ -3,6 +3,7 @@ from __future__ import absolute_import, division, print_function
 __author__ = "Aaron Fienberg"
 
 import tensorflow as tf
+import numpy as np
 
 
 @tf.function
@@ -25,7 +26,7 @@ def freedom_nllh(
     models: tuple or list or other indexable object
         (hitnet, chargenet)
     boundary_guard: dict
-        boundary guard dict containing the keys "model", "bg_lim", and "invalid_llh"
+        boundary guard dict containing the keys "model", "bg_lim", "invalid_llh" and "prior"
     """
     hitnet = models[0]
     chargenet = models[1]
@@ -67,7 +68,7 @@ def freedom_nllh(
 
 
 @tf.function
-def apply_boundary_guard(base_llhs, theta, model, bg_lim, invalid_llh):
+def apply_boundary_guard(base_llhs, theta, model, bg_lim, invalid_llh, prior):
     """
     apply the boundary guard
 
@@ -83,11 +84,25 @@ def apply_boundary_guard(base_llhs, theta, model, bg_lim, invalid_llh):
         boundary guard limit
     invalid_llh: tf.constant
         value returned at points where model(param) <= bg_lim
+    prior: tf.constant
+        should boundary guard also be used as bayesian prior (otherwise just hard limit)
 
     """
-    bg_vals = model(theta)[:, 0]
+    param_limits = np.array([ #sets boundary guard input between 0 and 1
+        [-500, 500],
+        [-500, 500],
+        [-1000, 700],
+        [800, 20000],
+        [0, 2*np.pi],
+        [0, np.pi],
+        [0.1, 1000],
+        [0, 1000]
+    ])
+    scales = (param_limits[:, 1] - param_limits[:, 0])
+    
+    bg_vals = model((theta - param_limits[:, 0]) / scales)[:, 0]
 
-    return tf.where(bg_vals <= bg_lim, invalid_llh, base_llhs)
+    return tf.where(bg_vals <= bg_lim, invalid_llh, base_llhs - bg_vals*tf.cast(prior, tf.float32))
 
 
 def wrap_partial_chargenet(partialnet, n_params, n_groups, features_per_group):

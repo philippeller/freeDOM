@@ -4,6 +4,7 @@ import numpy as np
 import pkg_resources
 
 from freedom.neural_nets.transformations import chargenet_trafo, hitnet_trafo, stringnet_trafo, layernet_trafo, domnet_trafo
+from freedom.neural_nets.domnet import combi_activation
 
 class LLH():
     def __init__(self,
@@ -64,7 +65,7 @@ class LLH():
                 self.allowed_layers = 'all'
             
         else:
-            self.domnet = tf.keras.models.load_model(domnet_file, custom_objects={'domnet_trafo':domnet_trafo})
+            self.domnet = tf.keras.models.load_model(domnet_file, custom_objects={'domnet_trafo':domnet_trafo}) #, 'combi_activation':combi_activation
             self.domnet.layers[-1].activation = tf.keras.activations.linear
             self.domnet.compile()
             self.chargenet = None
@@ -344,6 +345,6 @@ class upgrade_LLH():
         total_llh_DOM = all_hits_llh_DOM + charge_llh_DOM
         total_llh_mDOM = all_hits_llh_mDOM + charge_llh_mDOM
         total_llh_DEgg = all_hits_llh_DEgg + charge_llh_DEgg
-        total_llh = total_llh_DOM + total_llh_mDOM + total_llh_DEgg
+        total_llh = total_llh_DOM + total_llh_mDOM + total_llh_DEgg #+ charge_llh_all
 
         return total_llh, total_llh_DOM, total_llh_mDOM, total_llh_DEgg, charge_llh_all

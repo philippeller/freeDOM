@@ -15,10 +15,13 @@ import datetime
 import pkg_resources
 import functools
 import sys
+import os
 
 from multiprocessing import Process, Pool
 
 import numpy as np
+from scipy import constants
+import tensorflow as tf
 
 import zmq
 
@@ -32,43 +35,69 @@ from freedom.reco import bounds
 from freedom.reco import summary_df
 from freedom.reco import prefit
 
+#load time residual spline function
+from scipy.interpolate import UnivariateSpline
+from freedom.utils.time_residual import TimeResidual
+with open(pkg_resources.resource_filename('freedom', 'resources/prior/oscNext_time_residual_prior.pkl'), 'rb') as F:
+    ftr = pickle.load(F)
+ftr = UnivariateSpline._from_tck(ftr)
+ftr.ext = 1
 
-def get_batch_closure(client, event, out_of_bounds):
+
+def get_batch_closure(clients, event, out_of_bounds, Tprior=True):
     """returns LLH batch eval closure for this event. The closure is a function of one argument: the hypotheses to evaluate"""
     hit_data = event["hit_data"]
     evt_data = event["evt_data"]
-
+    
     def eval_llh(params):
-        llhs = np.atleast_1d(client.eval_llh(hit_data, evt_data, params))
+        llhs = 0
+        for i in range(len(clients)):
+            llhs += np.atleast_1d(clients[i].eval_llh(hit_data[i], evt_data[i], params))
+            
+            if Tprior:
+                tresiduals = TimeResidual(np.tile(hit_data[i], (len(llhs),1)).astype(np.float32), 
+                                          np.repeat(params, len(hit_data[i]), axis=0).astype(np.float32))
+                tresiduals = np.log(np.clip(ftr(tresiduals), 1e-10, 1))
+                llhs -= np.sum(tresiduals.reshape((len(llhs), len(hit_data[i]))), axis=1)
 
         return bounds.invalid_replace(llhs, params, out_of_bounds)
-
+    
     return eval_llh
 
 
 def batch_crs_fit(
     event,
-    client,
+    clients,
     rng,
     init_range,
     search_limits,
     n_live_points,
     bounds_check_type="cube",
+    Tprior=True,
     **sph_opt_kwargs,
 ):
 
     out_of_bounds = bounds.get_out_of_bounds_func(search_limits, bounds_check_type)
 
-    eval_llh = get_batch_closure(client, event, out_of_bounds)
+    eval_llh = get_batch_closure(clients, event, out_of_bounds, Tprior=Tprior)
 
     n_params = len(init_range)
 
-    box_limits = prefit.initial_box(event["hit_data"], init_range, n_params=n_params)
+    a = np.array([])
+    for e in event['hit_data']:
+        if len(e) == 0:
+            continue
+        if len(a) == 0:
+            a = e
+        else:
+            a = np.append(a, e, axis=0)
+    if len(a) == 0:
+        a = np.array([[0, 0, -500, 9500, 1]])
+    box_limits = prefit.initial_box(a, init_range, n_params=n_params)
 
     uniforms = rng.uniform(size=(n_live_points, n_params))
 
     initial_points = box_limits[:, 0] + uniforms * (box_limits[:, 1] - box_limits[:, 0])
-
     # energy parameters need to be converted from log energy to energy
     initial_points[:, 6:] = 10 ** initial_points[:, 6:]
 
@@ -92,33 +121,54 @@ def fit_events(
     n_live_points,
     random_seed=None,
     conf_timeout=60000,
+    Tprior=True,
     **sph_opt_kwargs,
 ):
     rng = np.random.default_rng(random_seed)
 
     outputs = []
 
-    client = LLHClient(ctrl_addr=ctrl_addrs[index], conf_timeout=conf_timeout)
+    clients = [LLHClient(ctrl_addr=ctrl_addrs[index], conf_timeout=conf_timeout)]
+    #clients = [] # use this for ICU reco
+    #for i in range(3):
+    #    clients.append(LLHClient(ctrl_addr=ctrl_addrs[i], conf_timeout=conf_timeout))
 
     for event in events:
+        start = time.time()
         fit_res = batch_crs_fit(
             event,
-            client,
+            clients,
             rng,
             init_range,
             search_limits,
             n_live_points=n_live_points,
+            Tprior=Tprior,
             **sph_opt_kwargs,
         )
-
-        true_param_llh = client.eval_llh(
-            event["hit_data"], event["evt_data"], event["params"]
-        )
-        retro_param_llh = client.eval_llh(
-            event["hit_data"], event["evt_data"], event["retro"]
-        )
-
-        outputs.append((fit_res, true_param_llh, retro_param_llh))
+        delta = time.time() - start
+        
+        true_param_llh = 0
+        for i in range(len(clients)):
+            true_param_llh += clients[i].eval_llh(
+                event["hit_data"][i], event["evt_data"][i], event["params"]
+            )
+            if Tprior:
+                tresidual = TimeResidual(event["hit_data"][i], np.array([event["params"]]))
+                tresidual = np.log(np.clip(ftr(tresidual), 1e-10, 1))
+                true_param_llh -= np.sum(tresidual)
+        
+        if "retro" in event.keys():
+            retro_param_llh = clients[0].eval_llh(
+                event["hit_data"], event["evt_data"], event["retro"]
+            )
+            if Tprior:
+                tresidual = TimeResidual(event["hit_data"][i], np.array([event["retro"]]))
+                tresidual = np.log(np.clip(ftr(tresidual), 1e-10, 1))
+                retro_param_llh -= np.sum(tresidual)
+            
+            outputs.append((fit_res, true_param_llh, delta, retro_param_llh))
+        else:
+            outputs.append((fit_res, true_param_llh, delta))
 
     return outputs
 
@@ -150,6 +200,9 @@ def start_service(params, ctrl_addr, req_addr, gpu):
     import os
 
     os.environ["CUDA_VISIBLE_DEVICES"] = f"{gpu}"
+    gpus = tf.config.list_physical_devices("GPU")
+    for gpu in gpus:
+        tf.config.experimental.set_memory_growth(gpu, True)
 
     params = params.copy()
     params["ctrl_addr"] = ctrl_addr
