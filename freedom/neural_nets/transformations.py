@@ -48,19 +48,46 @@ class hitnet_trafo(tf.keras.layers.Layer):
 
 
     def TimeResidual(self, hits, params, Index=1.33):
+        '''
+        Calculates the difference between the earliest possible arrival time and the measured time of a photon
+
+        Parameters:
+        -----------
+
+        hits : tensor
+            shape (N, 4+), containing hit DOM position x, y, z and hit time
+
+        params : tensor
+            shape (N, len(labels))
+
+        '''
         hitpos = hits[:,:3]
         T_exp = self.CherenkovTime(params, hitpos, Index)
         T_meas = hits[:,3] - params[:, self.time_idx]
         return T_meas - T_exp
 
     def CherenkovTime(self, params, position, Index=1.33):
+        '''
+        The earliest possible arrival time of a Cherenkov photon at the given position.
+        Assumes a CC neutrino interaction, where the incoming neutrino has the given params.
+
+        Parameters:
+        -----------
+
+        params : tensor
+            shape (N, len(labels))
+        
+        position : tensor
+            shape (N, 3), containing hit DOM position x, y, z
+
+        '''
         changle = np.arccos(1/Index).astype(np.float32) #tf.math.acos(1/Index)
         length = tf.clip_by_value(params[:, self.track_energy_idx], self.min_energy, self.max_energy) * 5 #m
         Length = tf.stack([length, length, length], axis=1)
 
         # closest point on (inf) track, dist, dist along track and direction
         appos, apdist, s, Dir = self.ClosestApproachCalc(params, position)
-        a = s - apdist/tf.math.tan(changle)
+        a = s - apdist/tf.math.tan(changle) #photon emission distance along track
 
         return tf.where(a <= 0.,
                         tf.norm(position-params[:,:3], axis=1) * Index/self.speed_of_light,
@@ -71,6 +98,22 @@ class hitnet_trafo(tf.keras.layers.Layer):
                        )
 
     def ClosestApproachCalc(self, params, position):
+        '''
+        Calculates the closest point to the given position on an infinite track
+        with direction specified in given params, the distance of this point and
+        the given position as well as the distant of this point along the track.
+        Also returns track direction vector of length 1
+
+        Parameters:
+        -----------
+
+        params : tensor
+            shape (N, len(labels))
+
+        position : tensor
+            shape (N, 3), containing hit DOM position x, y, z
+
+        '''
         theta  = params[:, self.zenith_idx]
         phi    = params[:, self.azimuth_idx]
         pos0_x = params[:, self.x_idx]

@@ -15,6 +15,8 @@ import sys
 import pkg_resources
 
 import numpy as np
+from scipy.interpolate import UnivariateSpline
+import pickle
 
 # import numba
 import tensorflow as tf
@@ -303,16 +305,23 @@ class LLHService:
         self._req_sock = req_sock
         self._ctrl_sock = ctrl_sock
 
-    def _init_boundary_guard(self, file, bg_lim, invalid_llh, prior, custom_objects=None):
+    def _init_boundary_guard(self, file, param_limits, bg_lim, invalid_llh, prior=False, Tprior=None, custom_objects=None):
         if custom_objects == None:
             model = tf.keras.models.load_model(file)
         else:
             model = tf.keras.models.load_model(file, custom_objects=custom_objects)
+        param_limits = tf.constant(param_limits, tf.float32)
         bg_lim = tf.constant(bg_lim, tf.float32)
         invalid_llh = tf.constant(invalid_llh, tf.float32)
         prior = tf.constant(prior, tf.bool)
+        if Tprior is not None:
+            with open(Tprior, 'rb') as F:
+                Tprior = pickle.load(F)
+            Tprior = UnivariateSpline._from_tck(Tprior)
+            Tprior.ext = 1
 
-        self._boundary_guard = dict(model=model, bg_lim=bg_lim, invalid_llh=invalid_llh, prior=prior)
+        self._boundary_guard = dict(model=model, param_limits=param_limits, bg_lim=bg_lim, invalid_llh=invalid_llh, 
+                                    prior=prior, Tprior=Tprior)
 
     def __enter__(self):
         return self

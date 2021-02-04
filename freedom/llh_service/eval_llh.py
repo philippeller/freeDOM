@@ -3,7 +3,6 @@ from __future__ import absolute_import, division, print_function
 __author__ = "Aaron Fienberg"
 
 import tensorflow as tf
-import numpy as np
 
 
 @tf.function
@@ -26,7 +25,7 @@ def freedom_nllh(
     models: tuple or list or other indexable object
         (hitnet, chargenet)
     boundary_guard: dict
-        boundary guard dict containing the keys "model", "bg_lim", "invalid_llh" and "prior"
+        boundary guard dict containing the keys "model", "param_limits", "bg_lim", "invalid_llh", "prior" and "Tprior"
     """
     hitnet = models[0]
     chargenet = models[1]
@@ -62,13 +61,28 @@ def freedom_nllh(
     base_llhs = hit_llh_sums[:, 0, 0] + charge_llhs
 
     if boundary_guard is not None:
+        #time residual prior
+        time_res_prior = boundary_guard['Tprior'] #boundary_guard.pop('Tprior', None)
+        if time_res_prior is not None:
+            tresiduals = hitnet.layers[2].TimeResidual(hit_data, dense_theta)
+            log_p_tres = tf.math.log(tf.clip_by_value(tf.py_function(time_res_prior, [tresiduals], tf.float32), 1e-10, 1))
+            log_p_tres_splits = tf.split(tf.reshape(log_p_tres, tf.shape(hit_llhs)), n_obs)
+            log_p_tres_sums = tf.stack(
+                [
+                    tf.matmul(log_p_tres, charge_split[:, tf.newaxis], transpose_a=True)
+                    for log_p_tres, charge_split in zip(log_p_tres_splits, charge_splits)
+                ]
+            )
+            
+            base_llhs -= log_p_tres_sums[:, 0, 0]
+        
         return apply_boundary_guard(base_llhs, theta, **boundary_guard)
     else:
         return base_llhs
 
 
 @tf.function
-def apply_boundary_guard(base_llhs, theta, model, bg_lim, invalid_llh, prior):
+def apply_boundary_guard(base_llhs, theta, model, param_limits, bg_lim, invalid_llh, prior, Tprior):
     """
     apply the boundary guard
 
@@ -80,6 +94,8 @@ def apply_boundary_guard(base_llhs, theta, model, bg_lim, invalid_llh, prior):
         parameters at which to evaluate the boundary guard
     model: tf.keras.Model
         the boundary guard model
+    param_limits: tf.constant
+        parameter limits to normalize boundary guard input (make sure you use the same as in training!)
     bg_lim: tf.constant
         boundary guard limit
     invalid_llh: tf.constant
@@ -88,19 +104,9 @@ def apply_boundary_guard(base_llhs, theta, model, bg_lim, invalid_llh, prior):
         should boundary guard also be used as bayesian prior (otherwise just hard limit)
 
     """
-    param_limits = np.array([ #sets boundary guard input between 0 and 1
-        [-500, 500],
-        [-500, 500],
-        [-1000, 700],
-        [800, 20000],
-        [0, 2*np.pi],
-        [0, np.pi],
-        [0.1, 1000],
-        [0, 1000]
-    ])
-    scales = (param_limits[:, 1] - param_limits[:, 0])
+    scales = (param_limits[1] - param_limits[0])
     
-    bg_vals = model((theta - param_limits[:, 0]) / scales)[:, 0]
+    bg_vals = model((theta - param_limits[0]) / scales)[:, 0]
 
     return tf.where(bg_vals <= bg_lim, invalid_llh, base_llhs - bg_vals*tf.cast(prior, tf.float32))
 

@@ -35,16 +35,8 @@ from freedom.reco import bounds
 from freedom.reco import summary_df
 from freedom.reco import prefit
 
-#load time residual spline function
-from scipy.interpolate import UnivariateSpline
-from freedom.utils.time_residual import TimeResidual
-with open(pkg_resources.resource_filename('freedom', 'resources/prior/oscNext_time_residual_prior.pkl'), 'rb') as F:
-    ftr = pickle.load(F)
-ftr = UnivariateSpline._from_tck(ftr)
-ftr.ext = 1
 
-
-def get_batch_closure(clients, event, out_of_bounds, Tprior=True):
+def get_batch_closure(clients, event, out_of_bounds):
     """returns LLH batch eval closure for this event. The closure is a function of one argument: the hypotheses to evaluate"""
     hit_data = event["hit_data"]
     evt_data = event["evt_data"]
@@ -53,13 +45,7 @@ def get_batch_closure(clients, event, out_of_bounds, Tprior=True):
         llhs = 0
         for i in range(len(clients)):
             llhs += np.atleast_1d(clients[i].eval_llh(hit_data[i], evt_data[i], params))
-            
-            if Tprior:
-                tresiduals = TimeResidual(np.tile(hit_data[i], (len(llhs),1)).astype(np.float32), 
-                                          np.repeat(params, len(hit_data[i]), axis=0).astype(np.float32))
-                tresiduals = np.log(np.clip(ftr(tresiduals), 1e-10, 1))
-                llhs -= np.sum(tresiduals.reshape((len(llhs), len(hit_data[i]))), axis=1)
-
+        
         return bounds.invalid_replace(llhs, params, out_of_bounds)
     
     return eval_llh
@@ -73,27 +59,27 @@ def batch_crs_fit(
     search_limits,
     n_live_points,
     bounds_check_type="cube",
-    Tprior=True,
     **sph_opt_kwargs,
 ):
 
     out_of_bounds = bounds.get_out_of_bounds_func(search_limits, bounds_check_type)
 
-    eval_llh = get_batch_closure(clients, event, out_of_bounds, Tprior=Tprior)
+    eval_llh = get_batch_closure(clients, event, out_of_bounds)
 
     n_params = len(init_range)
 
-    a = np.array([])
-    for e in event['hit_data']:
-        if len(e) == 0:
+    # for ICU reco it can happend that we have empty hit data
+    all_hits = np.array([])
+    for hits in event['hit_data']:
+        if len(hits) == 0:
             continue
-        if len(a) == 0:
-            a = e
+        if len(all_hits) == 0:
+            all_hits = hits
         else:
-            a = np.append(a, e, axis=0)
-    if len(a) == 0:
-        a = np.array([[0, 0, -500, 9500, 1]])
-    box_limits = prefit.initial_box(a, init_range, n_params=n_params)
+            all_hits = np.append(all_hits, hits, axis=0)
+    if len(all_hits) == 0:
+        all_hits = np.array([[0, 0, -500, 9500, 1]])
+    box_limits = prefit.initial_box(all_hits, init_range, n_params=n_params)
 
     uniforms = rng.uniform(size=(n_live_points, n_params))
 
@@ -121,7 +107,6 @@ def fit_events(
     n_live_points,
     random_seed=None,
     conf_timeout=60000,
-    Tprior=True,
     **sph_opt_kwargs,
 ):
     rng = np.random.default_rng(random_seed)
@@ -142,7 +127,6 @@ def fit_events(
             init_range,
             search_limits,
             n_live_points=n_live_points,
-            Tprior=Tprior,
             **sph_opt_kwargs,
         )
         delta = time.time() - start
@@ -152,20 +136,12 @@ def fit_events(
             true_param_llh += clients[i].eval_llh(
                 event["hit_data"][i], event["evt_data"][i], event["params"]
             )
-            if Tprior:
-                tresidual = TimeResidual(event["hit_data"][i], np.array([event["params"]]))
-                tresidual = np.log(np.clip(ftr(tresidual), 1e-10, 1))
-                true_param_llh -= np.sum(tresidual)
         
         if "retro" in event.keys():
             retro_param_llh = clients[0].eval_llh(
                 event["hit_data"], event["evt_data"], event["retro"]
             )
-            if Tprior:
-                tresidual = TimeResidual(event["hit_data"][i], np.array([event["retro"]]))
-                tresidual = np.log(np.clip(ftr(tresidual), 1e-10, 1))
-                retro_param_llh -= np.sum(tresidual)
-            
+
             outputs.append((fit_res, true_param_llh, delta, retro_param_llh))
         else:
             outputs.append((fit_res, true_param_llh, delta))
