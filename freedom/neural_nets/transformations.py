@@ -1,6 +1,5 @@
 """Transformation tensorflow layers"""
 import tensorflow as tf
-import numpy as np
 from scipy import constants
 
 
@@ -69,7 +68,7 @@ class hitnet_trafo(tf.keras.layers.Layer):
     def CherenkovTime(self, params, position, Index=1.33):
         '''
         The earliest possible arrival time of a Cherenkov photon at the given position.
-        Assumes a CC neutrino interaction, where the incoming neutrino has the given params.
+        Assumes neutrino interaction with given params.
 
         Parameters:
         -----------
@@ -81,7 +80,7 @@ class hitnet_trafo(tf.keras.layers.Layer):
             shape (N, 3), containing hit DOM position x, y, z
 
         '''
-        changle = np.arccos(1/Index).astype(np.float32) #tf.math.acos(1/Index)
+        changle = tf.math.acos(1/Index)
         length = tf.clip_by_value(params[:, self.track_energy_idx], self.min_energy, self.max_energy) * 5 #m
         Length = tf.stack([length, length, length], axis=1)
 
@@ -92,7 +91,7 @@ class hitnet_trafo(tf.keras.layers.Layer):
         return tf.where(a <= 0.,
                         tf.norm(position-params[:,:3], axis=1) * Index/self.speed_of_light,
                         tf.where(a <= length,
-                                 (a + apdist/np.sin(changle)*Index) / self.speed_of_light,
+                                 (a + apdist/tf.math.sin(changle)*Index) / self.speed_of_light,
                                  (length + tf.norm(position-(params[:,:3] + Length*Dir), axis=1)*Index) / self.speed_of_light
                                 )
                        )
@@ -101,7 +100,7 @@ class hitnet_trafo(tf.keras.layers.Layer):
         '''
         Calculates the closest point to the given position on an infinite track
         with direction specified in given params, the distance of this point and
-        the given position as well as the distant of this point along the track.
+        the given position as well as the distance of this point along the track.
         Also returns track direction vector of length 1
 
         Parameters:
@@ -546,4 +545,4 @@ class chargenet_trafo(tf.keras.layers.Layer):
 
 def test_hitnet_trafo():
     t = hitnet_trafo(labels = ['x', 'y', 'z', 'time', 'azimuth','zenith', 'cascade_energy', 'track_energy'])
-    t(np.zeros((1, 9), dtype=np.float32), np.ones((1, 8), dtype=np.float32))
+    t(tf.constant([[0.]*9]), tf.constant([[1.]*8]))
