@@ -15,10 +15,13 @@ import datetime
 import pkg_resources
 import functools
 import sys
+import os
 
 from multiprocessing import Process, Pool
 
 import numpy as np
+from scipy import constants
+import tensorflow as tf
 
 import zmq
 
@@ -33,22 +36,24 @@ from freedom.reco import summary_df
 from freedom.reco import prefit
 
 
-def get_batch_closure(client, event, out_of_bounds):
+def get_batch_closure(clients, event, out_of_bounds):
     """returns LLH batch eval closure for this event. The closure is a function of one argument: the hypotheses to evaluate"""
     hit_data = event["hit_data"]
     evt_data = event["evt_data"]
-
+    
     def eval_llh(params):
-        llhs = np.atleast_1d(client.eval_llh(hit_data, evt_data, params))
-
+        llhs = 0
+        for i in range(len(clients)):
+            llhs += np.atleast_1d(clients[i].eval_llh(hit_data[i], evt_data[i], params))
+        
         return bounds.invalid_replace(llhs, params, out_of_bounds)
-
+    
     return eval_llh
 
 
 def batch_crs_fit(
     event,
-    client,
+    clients,
     rng,
     init_range,
     search_limits,
@@ -59,16 +64,26 @@ def batch_crs_fit(
 
     out_of_bounds = bounds.get_out_of_bounds_func(search_limits, bounds_check_type)
 
-    eval_llh = get_batch_closure(client, event, out_of_bounds)
+    eval_llh = get_batch_closure(clients, event, out_of_bounds)
 
     n_params = len(init_range)
 
-    box_limits = prefit.initial_box(event["hit_data"], init_range, n_params=n_params)
+    # for ICU reco it can happend that we have empty hit data
+    all_hits = np.array([])
+    for hits in event['hit_data']:
+        if len(hits) == 0:
+            continue
+        if len(all_hits) == 0:
+            all_hits = hits
+        else:
+            all_hits = np.append(all_hits, hits, axis=0)
+    if len(all_hits) == 0:
+        all_hits = np.array([[0, 0, -500, 9500, 1]])
+    box_limits = prefit.initial_box(all_hits, init_range, n_params=n_params)
 
     uniforms = rng.uniform(size=(n_live_points, n_params))
 
     initial_points = box_limits[:, 0] + uniforms * (box_limits[:, 1] - box_limits[:, 0])
-
     # energy parameters need to be converted from log energy to energy
     initial_points[:, 6:] = 10 ** initial_points[:, 6:]
 
@@ -98,27 +113,38 @@ def fit_events(
 
     outputs = []
 
-    client = LLHClient(ctrl_addr=ctrl_addrs[index], conf_timeout=conf_timeout)
+    clients = [LLHClient(ctrl_addr=ctrl_addrs[index], conf_timeout=conf_timeout)]
+    #clients = [] # use this for ICU reco
+    #for i in range(3):
+    #    clients.append(LLHClient(ctrl_addr=ctrl_addrs[i], conf_timeout=conf_timeout))
 
     for event in events:
+        start = time.time()
         fit_res = batch_crs_fit(
             event,
-            client,
+            clients,
             rng,
             init_range,
             search_limits,
             n_live_points=n_live_points,
             **sph_opt_kwargs,
         )
+        delta = time.time() - start
+        
+        true_param_llh = 0
+        for i in range(len(clients)):
+            true_param_llh += clients[i].eval_llh(
+                event["hit_data"][i], event["evt_data"][i], event["params"]
+            )
+        
+        if "retro" in event.keys():
+            retro_param_llh = clients[0].eval_llh(
+                event["hit_data"], event["evt_data"], event["retro"]
+            )
 
-        true_param_llh = client.eval_llh(
-            event["hit_data"], event["evt_data"], event["params"]
-        )
-        retro_param_llh = client.eval_llh(
-            event["hit_data"], event["evt_data"], event["retro"]
-        )
-
-        outputs.append((fit_res, true_param_llh, retro_param_llh))
+            outputs.append((fit_res, true_param_llh, delta, retro_param_llh))
+        else:
+            outputs.append((fit_res, true_param_llh, delta))
 
     return outputs
 
@@ -150,6 +176,9 @@ def start_service(params, ctrl_addr, req_addr, gpu):
     import os
 
     os.environ["CUDA_VISIBLE_DEVICES"] = f"{gpu}"
+    gpus = tf.config.list_physical_devices("GPU")
+    for gpu in gpus:
+        tf.config.experimental.set_memory_growth(gpu, True)
 
     params = params.copy()
     params["ctrl_addr"] = ctrl_addr
