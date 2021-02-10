@@ -1,11 +1,12 @@
 """
-Provides "postfit" functions. Postfits analyze the minimizer samples 
-to provide better parameter estimates 
+Provides "postfit" functions. Postfits analyze the minimizer samples
+to provide alternative parameter estimates and uncertainty estimates
 """
 
 __author__ = "Aaron Fienberg"
 
 import numpy as np
+import numpy.polynomial.polynomial as poly
 
 DELTA_LLH_CUT = 15
 DEFAULT_LOC_SPACING = (-1.5, 1.5, 10)
@@ -21,7 +22,7 @@ PAR_NAMES = [
 ]
 
 
-def get_stats(all_pts, par_names):
+def get_stats(all_pts, par_names, do_angles=True):
     llhs = all_pts[:, -1]
     w = np.exp(llhs.min() - llhs)
 
@@ -33,25 +34,32 @@ def get_stats(all_pts, par_names):
             means[i] = mean
             variances[i] = np.average((all_pts[:, i] - mean) ** 2, weights=w)
 
-    zen_ind = par_names.index("zenith")
-    az_ind = par_names.index("azimuth")
+    try:
+        zen_ind = par_names.index("zenith")
+        az_ind = par_names.index("azimuth")
+    except ValueError:
+        do_angles = False
 
-    zen = all_pts[:, zen_ind]
-    az = all_pts[:, az_ind]
+    if do_angles:
+        zen = all_pts[:, zen_ind]
+        az = all_pts[:, az_ind]
 
-    p_x = np.average(np.sin(zen) * np.cos(az), weights=w)
-    p_y = np.average(np.sin(zen) * np.sin(az), weights=w)
-    p_z = np.average(np.cos(zen), weights=w)
+        p_x = np.average(np.sin(zen) * np.cos(az), weights=w)
+        p_y = np.average(np.sin(zen) * np.sin(az), weights=w)
+        p_z = np.average(np.cos(zen), weights=w)
 
-    r = np.sqrt(p_x ** 2 + p_y ** 2 + p_z ** 2)
+        r = np.sqrt(p_x ** 2 + p_y ** 2 + p_z ** 2)
 
-    means[zen_ind] = np.arccos(p_z / r)
-    means[az_ind] = np.arctan2(p_y, p_x) % (2 * np.pi)
+        if r != 0:
+            means[zen_ind] = np.arccos(p_z / r)
+            means[az_ind] = np.arctan2(p_y, p_x) % (2 * np.pi)
 
-    variances[zen_ind] = np.average(
-        (all_pts[:, zen_ind] - means[zen_ind]) ** 2, weights=w
-    )
-    variances[az_ind] = np.average((all_pts[:, az_ind] - means[az_ind]) ** 2, weights=w)
+            variances[zen_ind] = np.average(
+                (all_pts[:, zen_ind] - means[zen_ind]) ** 2, weights=w
+            )
+            variances[az_ind] = np.average(
+                (all_pts[:, az_ind] - means[az_ind]) ** 2, weights=w
+            )
 
     return means, variances
 
@@ -82,11 +90,14 @@ def get_envelope(
         xs.append(loc_pars[min_ind])
         ys.append(loc_llhs[min_ind] - min_llh)
 
-    return np.polyfit(xs, ys, 2), xs, ys
+    return poly.polyfit(xs, ys, 2), xs, ys
 
 
 def get_parabola_min(quad_coeffs):
-    return -quad_coeffs[1] / (2 * quad_coeffs[0])
+    if quad_coeffs[2] != 0:
+        return -quad_coeffs[1] / (2 * quad_coeffs[2])
+    else:
+        return np.nan
 
 
 def postfit(all_pts, par_names=PAR_NAMES, llh_cut=DELTA_LLH_CUT):

@@ -69,7 +69,7 @@ def add_postfit_res(df_dict, all_outs, par_names):
         for i, _ in enumerate(par_names):
             mean_ests[i].append(pf["means"][i])
             env_ests[i].append(pf["env_mins"][i])
-            curvatures[i].append(pf["envs"][i][0])
+            curvatures[i].append(pf["envs"][i][2])
             stds[i].append(pf["stds"][i])
 
     for i, name in enumerate(par_names):
