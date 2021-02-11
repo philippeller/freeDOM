@@ -61,28 +61,38 @@ def freedom_nllh(
     base_llhs = hit_llh_sums[:, 0, 0] + charge_llhs
 
     if boundary_guard is not None:
-        #time residual prior
-        time_res_prior = boundary_guard['Tprior'] #boundary_guard.pop('Tprior', None)
+        # time residual prior
+        time_res_prior = boundary_guard["Tprior"]  # boundary_guard.pop('Tprior', None)
         if time_res_prior is not None:
             tresiduals = hitnet.layers[2].TimeResidual(hit_data, dense_theta)
-            log_p_tres = tf.math.log(tf.clip_by_value(tf.py_function(time_res_prior, [tresiduals], tf.float32), 1e-10, 1))
-            log_p_tres_splits = tf.split(tf.reshape(log_p_tres, tf.shape(hit_llhs)), n_obs)
+            log_p_tres = tf.math.log(
+                tf.clip_by_value(
+                    tf.py_function(time_res_prior, [tresiduals], tf.float32), 1e-10, 1
+                )
+            )
+            log_p_tres_splits = tf.split(
+                tf.reshape(log_p_tres, tf.shape(hit_llhs)), n_obs
+            )
             log_p_tres_sums = tf.stack(
                 [
                     tf.matmul(log_p_tres, charge_split[:, tf.newaxis], transpose_a=True)
-                    for log_p_tres, charge_split in zip(log_p_tres_splits, charge_splits)
+                    for log_p_tres, charge_split in zip(
+                        log_p_tres_splits, charge_splits
+                    )
                 ]
             )
-            
+
             base_llhs -= log_p_tres_sums[:, 0, 0]
-        
+
         return apply_boundary_guard(base_llhs, theta, **boundary_guard)
     else:
         return base_llhs
 
 
 @tf.function
-def apply_boundary_guard(base_llhs, theta, model, param_limits, bg_lim, invalid_llh, prior, Tprior):
+def apply_boundary_guard(
+    base_llhs, theta, model, param_limits, bg_lim, invalid_llh, prior, Tprior
+):
     """
     apply the boundary guard
 
@@ -104,11 +114,13 @@ def apply_boundary_guard(base_llhs, theta, model, param_limits, bg_lim, invalid_
         should boundary guard also be used as bayesian prior (otherwise just hard limit)
 
     """
-    scales = (param_limits[1] - param_limits[0])
-    
+    scales = param_limits[1] - param_limits[0]
+
     bg_vals = model((theta - param_limits[0]) / scales)[:, 0]
 
-    return tf.where(bg_vals <= bg_lim, invalid_llh, base_llhs - bg_vals*tf.cast(prior, tf.float32))
+    return tf.where(
+        bg_vals <= bg_lim, invalid_llh, base_llhs - bg_vals * tf.cast(prior, tf.float32)
+    )
 
 
 def wrap_partial_chargenet(partialnet, n_params, n_groups, features_per_group):
