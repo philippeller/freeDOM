@@ -137,7 +137,7 @@ def calc_parabola_opt(quad_coeffs):
 
     Parameters
     ----------
-    quad_coeffs: np.ndarray
+    quad_coeffs : np.ndarray
         the parabola coefficients; p0 + p1*x + p2*x^2 -> [p0, p1, p2]
 
     Returns
@@ -159,11 +159,11 @@ def adjust_angle_samples(par_samps, center, angle_max=2 * np.pi):
 
     Parameters
     ----------
-    par_samps: np.ndarray
+    par_samps : np.ndarray
         the parameter samples
-    center: float
+    center : float
         the point from which to minimize the distance of the par_samps
-    angle_max: float, default 2*pi
+    angle_max : float, default 2*pi
 
     Returns
     -------
@@ -188,13 +188,13 @@ def postfit(all_pts, par_names=PAR_NAMES, llh_cut=DELTA_LLH_CUT):
 
     Parameters
     ----------
-    all_pts: np.ndarray
+    all_pts : np.ndarray
         the optimizer samples; the negative llh values should be in the last column
     par_names : list, optional
         parameter names, defaults to
         ["x", "y", "z", "time", "azimuth", "zenith", "cascade energy", "track energy"]
         "azimuth" and "zenith" parameters receive special treatment
-    llh_cut: float, default 15
+    llh_cut : float, default 15
         postfit routines only consider samples within llh_cut llh of the best sample
 
     Returns
