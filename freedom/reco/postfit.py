@@ -184,7 +184,7 @@ def adjust_angle_samples(par_samps, center, angle_max=2 * np.pi):
 def postfit(all_pts, par_names=PAR_NAMES, llh_cut=DELTA_LLH_CUT):
     """postfit routine for event reconstruction
 
-    The postfit includes uncertainty estimation and alterative parameter estimators
+    The postfit includes uncertainty estimation and alternative parameter estimators
 
     Parameters
     ----------
@@ -212,7 +212,7 @@ def postfit(all_pts, par_names=PAR_NAMES, llh_cut=DELTA_LLH_CUT):
     par_samps = [p for p in cut_pts[:, :-1].T]
     env_rets = []
     for par, mean, std, name in zip(par_samps, means, stds, par_names):
-        # adjust azmiuth samples before attempting to fit the envelope
+        # adjust azimuth samples before attempting to fit the envelope
         if name == "azimuth":
             par = adjust_angle_samples(par, mean)
 
