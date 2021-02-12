@@ -66,6 +66,7 @@ def batch_crs_fit(
     bounds_check_type="cube",
     do_postfit=False,
     store_all=False,
+    truth_seed=False,
     **sph_opt_kwargs,
 ):
 
@@ -86,13 +87,21 @@ def batch_crs_fit(
             all_hits = np.append(all_hits, hits, axis=0)
     if len(all_hits) == 0:
         all_hits = np.array([[0, 0, -500, 9500, 1]])
-    box_limits = prefit.initial_box(all_hits, init_range, n_params=n_params)
+
+    if truth_seed:
+        box_limits = prefit.truth_seed_box(event["params"], init_range)
+    else:
+        box_limits = prefit.initial_box(all_hits, init_range, n_params=n_params)
 
     uniforms = rng.uniform(size=(n_live_points, n_params))
 
     initial_points = box_limits[:, 0] + uniforms * (box_limits[:, 1] - box_limits[:, 0])
+
     # energy parameters need to be converted from log energy to energy
     initial_points[:, 6:] = 10 ** initial_points[:, 6:]
+
+    if truth_seed:
+        initial_points[-1] = event["params"]
 
     opt_ret = spherical_opt.spherical_opt(
         func=eval_llh,
@@ -122,6 +131,7 @@ def fit_events(
     conf_timeout=60000,
     do_postfit=False,
     store_all=False,
+    truth_seed=False,
     **sph_opt_kwargs,
 ):
     rng = np.random.default_rng(random_seed)
@@ -144,6 +154,7 @@ def fit_events(
             n_live_points=n_live_points,
             do_postfit=do_postfit,
             store_all=store_all,
+            truth_seed=truth_seed,
             **sph_opt_kwargs,
         )
         delta = time.time() - start
@@ -315,6 +326,7 @@ def main():
     conf_timeout = conf["conf_timeout"]
     sph_opt_kwargs = conf["spherical_opt_conf"]
     do_postfit = conf["do_postfit"]
+    truth_seed = conf.get("truth_seed", False)
 
     # fit events partial that fixes common parameters
     fit_events_partial = functools.partial(
@@ -325,6 +337,7 @@ def main():
         n_live_points=n_live_points,
         conf_timeout=conf_timeout,
         do_postfit=do_postfit,
+        truth_seed=truth_seed,
         **sph_opt_kwargs,
     )
 
