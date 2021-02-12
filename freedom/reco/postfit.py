@@ -23,7 +23,7 @@ PAR_NAMES = [
 ]
 
 
-def get_stats(all_pts, par_names, do_angles=True):
+def calc_stats(all_pts, par_names, do_angles=True):
     """Calculate likelihood-weighted mean and variance
 
     Given llh samples from an optimizer, this function calculates the likelihood-weighted
@@ -41,7 +41,7 @@ def get_stats(all_pts, par_names, do_angles=True):
     Returns
     -------
     tuple
-       ([means], [variances])
+        ([means], [variances])
     """
     llhs = all_pts[:, -1]
     w = np.exp(llhs.min() - llhs)
@@ -77,14 +77,15 @@ def get_stats(all_pts, par_names, do_angles=True):
             variances[zen_ind] = np.average(
                 (all_pts[:, zen_ind] - means[zen_ind]) ** 2, weights=w
             )
-            variances[az_ind] = np.average(
-                (all_pts[:, az_ind] - means[az_ind]) ** 2, weights=w
-            )
+
+            # adjust azimuth samples prior to calculating azimuth variance
+            az_pts = adjust_angle_samples(all_pts[:, az_ind], means[az_ind])
+            variances[az_ind] = np.average((az_pts - means[az_ind]) ** 2, weights=w)
 
     return means, variances
 
 
-def get_envelope(
+def fit_envelope(
     par, llhs, mean, std, start_step=DEFAULT_START_STEP, loc_spacing=DEFAULT_LOC_SPACING
 ):
     """Estimate 1d parabolic llh envelopes for a single parameter
@@ -103,7 +104,7 @@ def get_envelope(
     Returns
     -------
     tuple
-       ([parabola coeffs], [fit x pts], [fit y pts])
+        ([parabola coeffs], [fit x pts], [fit y pts])
     """
     min_llh = llhs.min()
 
@@ -131,7 +132,7 @@ def get_envelope(
     return poly.polyfit(xs, ys, 2), xs, ys
 
 
-def get_parabola_opt(quad_coeffs):
+def calc_parabola_opt(quad_coeffs):
     """x value of the parabola optimum
 
     Parameters
@@ -149,6 +150,37 @@ def get_parabola_opt(quad_coeffs):
         return np.nan
 
 
+def adjust_angle_samples(par_samps, center, angle_max=2 * np.pi):
+    """Adjust angle (usually azimuth) samples
+
+    Adjusts angle values by +/- angle_max (typically 2pi) to minimize their distance
+    from the "center" point. This improves uncertainty estimations for angular parameters
+    when the best fit point is close to the edge of the allowed range.
+
+    Parameters
+    ----------
+    par_samps: np.ndarray
+        the parameter samples
+    center: float
+        the point from which to minimize the distance of the par_samps
+    angle_max: float, default 2*pi
+
+    Returns
+    -------
+    np.ndarray
+        a new array of the adjusted parameter samples
+    """
+    half_range = angle_max / 2
+    high_diff_q = par_samps - center > half_range
+    low_diff_q = center - par_samps > half_range
+
+    par_samps = np.copy(par_samps)
+    par_samps[high_diff_q] = par_samps[high_diff_q] - angle_max
+    par_samps[low_diff_q] = par_samps[low_diff_q] + angle_max
+
+    return par_samps
+
+
 def postfit(all_pts, par_names=PAR_NAMES, llh_cut=DELTA_LLH_CUT):
     """postfit routine for event reconstruction
 
@@ -157,7 +189,7 @@ def postfit(all_pts, par_names=PAR_NAMES, llh_cut=DELTA_LLH_CUT):
     Parameters
     ----------
     all_pts: np.ndarray
-        the optimizer samples; the negative llh values should be in the final column
+        the optimizer samples; the negative llh values should be in the last column
     par_names : list, optional
         parameter names, defaults to
         ["x", "y", "z", "time", "azimuth", "zenith", "cascade energy", "track energy"]
@@ -174,16 +206,26 @@ def postfit(all_pts, par_names=PAR_NAMES, llh_cut=DELTA_LLH_CUT):
     cut_pts = all_pts[all_llhs < all_llhs.min() + llh_cut]
     cut_llhs = cut_pts[:, -1]
 
-    means, variances = get_stats(cut_pts, par_names)
+    means, variances = calc_stats(cut_pts, par_names)
     stds = np.sqrt(variances)
 
-    env_rets = [
-        get_envelope(par, cut_llhs, mean, std)
-        for par, mean, std in zip(cut_pts[:, :-1].T, means, stds)
-    ]
+    par_samps = [p for p in cut_pts[:, :-1].T]
+    env_rets = []
+    for par, mean, std, name in zip(par_samps, means, stds, par_names):
+        # adjust azmiuth samples before attempting to fit the envelope
+        if name == "azimuth":
+            par = adjust_angle_samples(par, mean)
+
+        env_rets.append(fit_envelope(par, cut_llhs, mean, std))
+
     envs, env_xs, env_ys = list(zip(*env_rets))
 
-    env_mins = [get_parabola_opt(env) for env in envs]
+    env_mins = [calc_parabola_opt(env) for env in envs]
+    try:
+        az_ind = par_names.index("azimuth")
+        env_mins[az_ind] = env_mins[az_ind] % (2 * np.pi)
+    except ValueError:
+        pass
 
     return dict(
         means=means,
