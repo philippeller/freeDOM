@@ -15,12 +15,10 @@ import datetime
 import pkg_resources
 import functools
 import sys
-import os
 
 from multiprocessing import Process, Pool
 
 import numpy as np
-from scipy import constants
 import tensorflow as tf
 
 import zmq
@@ -33,21 +31,28 @@ from freedom.utils import i3cols_dataloader
 
 from freedom.reco import bounds
 from freedom.reco import summary_df
-from freedom.reco import prefit
+from freedom.reco import prefit, postfit
 
 
 def get_batch_closure(clients, event, out_of_bounds):
     """returns LLH batch eval closure for this event. The closure is a function of one argument: the hypotheses to evaluate"""
     hit_data = event["hit_data"]
     evt_data = event["evt_data"]
-    
+
     def eval_llh(params):
         llhs = 0
         for i in range(len(clients)):
             llhs += np.atleast_1d(clients[i].eval_llh(hit_data[i], evt_data[i], params))
-        
-        return bounds.invalid_replace(llhs, params, out_of_bounds)
-    
+
+        llhs = bounds.invalid_replace(llhs, params, out_of_bounds)
+
+        for param, llh in zip(params, llhs):
+            eval_llh.evaluated_pts.append(np.hstack((param, [llh])))
+
+        return llhs
+
+    eval_llh.evaluated_pts = []
+
     return eval_llh
 
 
@@ -59,6 +64,8 @@ def batch_crs_fit(
     search_limits,
     n_live_points,
     bounds_check_type="cube",
+    do_postfit=False,
+    store_all=False,
     **sph_opt_kwargs,
 ):
 
@@ -70,7 +77,7 @@ def batch_crs_fit(
 
     # for ICU reco it can happend that we have empty hit data
     all_hits = np.array([])
-    for hits in event['hit_data']:
+    for hits in event["hit_data"]:
         if len(hits) == 0:
             continue
         if len(all_hits) == 0:
@@ -95,6 +102,12 @@ def batch_crs_fit(
         **sph_opt_kwargs,
     )
 
+    if store_all:
+        opt_ret["all_pts"] = eval_llh.evaluated_pts
+
+    if do_postfit:
+        opt_ret["postfit"] = postfit.postfit(eval_llh.evaluated_pts)
+
     return opt_ret
 
 
@@ -107,6 +120,8 @@ def fit_events(
     n_live_points,
     random_seed=None,
     conf_timeout=60000,
+    do_postfit=False,
+    store_all=False,
     **sph_opt_kwargs,
 ):
     rng = np.random.default_rng(random_seed)
@@ -114,8 +129,8 @@ def fit_events(
     outputs = []
 
     clients = [LLHClient(ctrl_addr=ctrl_addrs[index], conf_timeout=conf_timeout)]
-    #clients = [] # use this for ICU reco
-    #for i in range(3):
+    # clients = [] # use this for ICU reco
+    # for i in range(3):
     #    clients.append(LLHClient(ctrl_addr=ctrl_addrs[i], conf_timeout=conf_timeout))
 
     for event in events:
@@ -127,16 +142,18 @@ def fit_events(
             init_range,
             search_limits,
             n_live_points=n_live_points,
+            do_postfit=do_postfit,
+            store_all=store_all,
             **sph_opt_kwargs,
         )
         delta = time.time() - start
-        
+
         true_param_llh = 0
         for i in range(len(clients)):
             true_param_llh += clients[i].eval_llh(
                 event["hit_data"][i], event["evt_data"][i], event["params"]
             )
-        
+
         if "retro" in event.keys():
             retro_param_llh = clients[0].eval_llh(
                 event["hit_data"], event["evt_data"], event["retro"]
@@ -230,8 +247,6 @@ def main():
     allowed_DOMs = np.load(
         pkg_resources.resource_filename("freedom", "resources/allowed_DOMs.npy")
     )
-    ndoms = len(allowed_DOMs)
-
     service_conf = conf["service_conf"]
 
     # add hit_data, evt_data keys based on the networks being used
@@ -248,10 +263,13 @@ def main():
                 (event["hit_data"], np.zeros((n_hits, n_additional_cols))), axis=1
             )
 
+        # adapt to structure created for ICU reco
+        event["hit_data"] = [event["hit_data"]]
+
         if "domnet_file" in service_conf:
-            event["evt_data"] = event["doms"][allowed_DOMs]
+            event["evt_data"] = [event["doms"][allowed_DOMs]]
         else:
-            event["evt_data"] = event["total_charge"]
+            event["evt_data"] = [event["total_charge"]]
 
     req_addrs = []
     ctrl_addrs = []
@@ -296,6 +314,7 @@ def main():
     n_live_points = conf["n_live_points"]
     conf_timeout = conf["conf_timeout"]
     sph_opt_kwargs = conf["spherical_opt_conf"]
+    do_postfit = conf["do_postfit"]
 
     # fit events partial that fixes common parameters
     fit_events_partial = functools.partial(
@@ -305,6 +324,7 @@ def main():
         search_limits=param_search_limits,
         n_live_points=n_live_points,
         conf_timeout=conf_timeout,
+        do_postfit=do_postfit,
         **sph_opt_kwargs,
     )
 

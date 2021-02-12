@@ -45,9 +45,35 @@ def build_summary_df(all_outs, par_names):
         n_iters=n_iters,
     )
     if len(retro_param_llhs) != 0:
-        df_dict['retro_p_llh'] = retro_param_llhs
+        df_dict["retro_p_llh"] = retro_param_llhs
 
     for p_name, p_list in zip(par_names, best_fit_ps):
         df_dict[p_name] = p_list
 
+    try:
+        add_postfit_res(df_dict, all_outs, par_names)
+    except KeyError:
+        pass
+
     return pd.DataFrame(df_dict)
+
+
+def add_postfit_res(df_dict, all_outs, par_names):
+    mean_ests = [[] for _ in par_names]
+    env_ests = [[] for _ in par_names]
+    curvatures = [[] for _ in par_names]
+    stds = [[] for _ in par_names]
+
+    for out in all_outs:
+        pf = out[0]["postfit"]
+        for i, _ in enumerate(par_names):
+            mean_ests[i].append(pf["means"][i])
+            env_ests[i].append(pf["env_mins"][i])
+            curvatures[i].append(pf["envs"][i][2])
+            stds[i].append(pf["stds"][i])
+
+    for i, name in enumerate(par_names):
+        df_dict[f"{name}_mean"] = mean_ests[i]
+        df_dict[f"{name}_env_est"] = env_ests[i]
+        df_dict[f"{name}_curvature"] = curvatures[i]
+        df_dict[f"{name}_std"] = stds[i]
