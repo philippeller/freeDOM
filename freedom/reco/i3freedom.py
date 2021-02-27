@@ -41,7 +41,7 @@ class I3FreeDOMClient:
     """FreeDOM client IceTray module. Connects to a running LLHService"""
 
     def __init__(self, ctrl_addr, conf_timeout, rng=None):
-        """initialize FreeDOM client, store reco configuration"""
+        """initialize FreeDOM client, connect to LLH service"""
         self._llh_client = LLHClient(ctrl_addr, conf_timeout)
 
         if rng is None:
