@@ -7,20 +7,12 @@ __author__ = "Aaron Fienberg"
 
 import numpy as np
 import numpy.polynomial.polynomial as poly
+from freedom.utils.i3frame_dataloader import DEFAULT_LABELS
 
 DELTA_LLH_CUT = 15
 DEFAULT_LOC_SPACING = (-1.5, 1.5, 10)
 DEFAULT_START_STEP = 0.05
-PAR_NAMES = [
-    "x",
-    "y",
-    "z",
-    "time",
-    "azimuth",
-    "zenith",
-    "cascade energy",
-    "track energy",
-]
+PAR_NAMES = DEFAULT_LABELS
 
 
 def calc_stats(all_pts, par_names, do_angles=True):

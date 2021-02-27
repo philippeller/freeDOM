@@ -13,8 +13,6 @@ import uuid
 import numpy as np
 import zmq
 
-from freedom.llh_service import llh_cython
-
 
 class LLHClient:
 
@@ -90,8 +88,7 @@ class LLHClient:
         # send a req_id string for development and debugging
         req_id_bytes = str(req_id).encode()
 
-        # self._sock.send_multipart([req_id_bytes, x, theta])
-        llh_cython.dispatch_request(self._sock, req_id_bytes, hit_data, evt_data, theta)
+        self._sock.send_multipart([req_id_bytes, hit_data, evt_data, theta])
 
     def eval_llh(self, hit_data, evt_data, theta, timeout=None):
         """Synchronous llh evaluation, blocking until llh is ready.

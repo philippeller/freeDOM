@@ -19,14 +19,12 @@ import sys
 from multiprocessing import Process, Pool
 
 import numpy as np
-import tensorflow as tf
 
 import zmq
 
 from spherical_opt import spherical_opt
 
 from freedom.llh_service.llh_client import LLHClient
-from freedom.llh_service.llh_service import LLHService
 from freedom.utils import i3cols_dataloader
 
 from freedom.reco import bounds
@@ -159,11 +157,15 @@ def fit_events(
         )
         delta = time.time() - start
 
-        true_param_llh = 0
-        for i in range(len(clients)):
-            true_param_llh += clients[i].eval_llh(
-                event["hit_data"][i], event["evt_data"][i], event["params"]
-            )
+        try:
+            true_param_llh = 0
+            for i in range(len(clients)):
+                true_param_llh += clients[i].eval_llh(
+                    event["hit_data"][i], event["evt_data"][i], event["params"]
+                )
+        except KeyError:
+            # true params not available
+            true_param_llh = None
 
         if "retro" in event.keys():
             retro_param_llh = clients[0].eval_llh(
@@ -184,25 +186,33 @@ def fit_event(
     search_limits,
     n_live_points,
     conf_timeout=60000,
+    do_postfit=False,
+    store_all=False,
+    truth_seed=False,
     **sph_opt_kwargs,
 ):
     """wrapper around fit_events to fit a single event"""
     return fit_events(
         [event],
-        0,
-        [ctrl_addr],
-        init_range,
-        search_limits,
-        n_live_points,
-        conf_timeout,
+        index=0,
+        ctrl_addrs=[ctrl_addr],
+        init_range=init_range,
+        search_limits=search_limits,
+        n_live_points=n_live_points,
+        conf_timeout=conf_timeout,
+        do_postfit=do_postfit,
+        store_all=store_all,
+        truth_seed=truth_seed,
         **sph_opt_kwargs,
     )[0]
 
 
 def start_service(params, ctrl_addr, req_addr, gpu):
-    # use a single GPU
     import os
+    import tensorflow as tf
+    from freedom.llh_service.llh_service import LLHService
 
+    # use a single GPU
     os.environ["CUDA_VISIBLE_DEVICES"] = f"{gpu}"
     gpus = tf.config.list_physical_devices("GPU")
     for gpu in gpus:
