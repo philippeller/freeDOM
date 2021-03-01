@@ -1,22 +1,25 @@
 """Reconstruct events with the I3FreedomClient"""
-
+import pkg_resources
+import sys
 from argparse import ArgumentParser
+
 from icecube import dataclasses, icetray, dataio
 from I3Tray import I3Tray
 
 import numpy as np
 import zmq
 
-import sys
-
-# temporary solution
-sys.path.append("/home/atfienberg/IceCube/freeDOM")
-sys.path.append("/home/atfienberg/IceCube/spherical_opt")
-
 from freedom.reco import i3freedom
-from freedom.utils.i3frame_dataloader import load_event
 
 CONF_TIMEOUT_MS = 10000
+
+# for counting events
+def evt_counter(frame):
+    evt_counter.evt_num += 1
+    print(f"Finished event {evt_counter.evt_num}")
+
+
+evt_counter.evt_num = 0
 
 
 def main():
@@ -32,10 +35,13 @@ def main():
         "--resource_dir",
         type=str,
         help="""Resource directory""",
-        default="/home/atfienberg/IceCube/freeDOM/freedom/resources",
+        default=pkg_resources.resource_filename("freedom", "resources"),
     )
     parser.add_argument(
         "--service_addr", type=str, required=True, help="""LLHService ctrl addr"""
+    )
+    parser.add_argument(
+        "--n_frames", type=int, default=None, help="""number of frames to process"""
     )
 
     args = parser.parse_args()
@@ -56,10 +62,15 @@ def main():
         reco_pulse_series_name="SRTTWOfflinePulsesDC",
         suffix="test",
     )
+    tray.AddModule(evt_counter)
     tray.AddModule(
         "I3Writer", DropOrphanStreams=[icetray.I3Frame.DAQ], filename=args.output_file
     )
-    tray.Execute(50)
+
+    if args.n_frames is None:
+        tray.Execute()
+    else:
+        tray.Execute(args.n_frames)
 
 
 if __name__ == "__main__":
