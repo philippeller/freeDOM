@@ -15,10 +15,7 @@ DEFAULT_LABELS = [
 
 def _is_invisible(particle, nu_ids=[12, 14, 16]):
     abs_id = abs(particle.pdg_encoding)
-    for nu_id in nu_ids:
-        if abs_id == nu_id:
-            return True
-    return False
+    return any(abs_id == nu_id for nu_id in nu_ids)
 
 
 def _is_muon(particle, muon_id=13):

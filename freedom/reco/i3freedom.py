@@ -36,6 +36,9 @@ DEFAULT_BATCH_SIZE = 12
 DEFAULT_MAX_ITER = 10000
 DEFAULT_SPHERICAL_INDICES = [[4, 5]]
 
+TRACK_M_PER_GEV = 15 / 3.3
+"""Borrowed from Retro's muon_hypo.py"""
+
 
 class I3FreeDOMClient:
     """FreeDOM client IceTray module. Connects to a running LLHService"""
@@ -172,11 +175,15 @@ def build_i3_particle(reco_pars, particle_type):
 
     particle.dir = I3Direction(reco_pars["zenith"], reco_pars["azimuth"])
     particle.energy = _energy_getters[particle_type](reco_pars) * I3Units.GeV
-    particle.length = np.nan
     particle.pdg_encoding = I3Particle.ParticleType.unknown
-    particle.pos = I3Position(*[reco_pars[d] * I3Units.m for d in ("x", "y", "z")])
+    particle.pos = I3Position(*(reco_pars[d] * I3Units.m for d in ("x", "y", "z")))
     particle.shape = shape_map[particle_type]
     particle.time = reco_pars["time"] * I3Units.ns
     particle.speed = I3Constants.c
+
+    if particle_type == "track":
+        particle.length = particle.energy * TRACK_M_PER_GEV * I3Units.m
+    else:
+        particle.length = np.nan
 
     return particle
