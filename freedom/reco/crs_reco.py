@@ -1,7 +1,7 @@
 """
-Fitting functions for CRS2-based FreeDOM event reconstruction 
+Fitting functions for CRS2-based FreeDOM event reconstruction
 
-Also provides a main() function to drive a CRS2-based reconstruction job 
+Also provides a main() function to drive a CRS2-based reconstruction job
 """
 
 __author__ = "Aaron Fienberg"
@@ -207,13 +207,13 @@ def fit_event(
     )[0]
 
 
-def start_service(params, ctrl_addr, req_addr, gpu):
+def start_service(params, ctrl_addr, req_addr, cuda_device):
     import os
     import tensorflow as tf
     from freedom.llh_service.llh_service import LLHService
 
     # use a single GPU
-    os.environ["CUDA_VISIBLE_DEVICES"] = f"{gpu}"
+    os.environ["CUDA_VISIBLE_DEVICES"] = f"{cuda_device}"
     gpus = tf.config.list_physical_devices("GPU")
     for gpu in gpus:
         tf.config.experimental.set_memory_growth(gpu, True)
@@ -223,7 +223,7 @@ def start_service(params, ctrl_addr, req_addr, gpu):
     params["req_addr"] = req_addr
 
     with LLHService(**params) as serv:
-        print(f"starting service work loop for gpu {gpu}...")
+        print(f"starting service work loop for cuda device {cuda_device}...")
         serv.start_work_loop()
 
 
