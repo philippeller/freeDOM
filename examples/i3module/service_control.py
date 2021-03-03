@@ -1,13 +1,29 @@
-"""Start a service to use with the client module"""
+"""Start or stop a service to use with the client module"""
 
 import sys
 from argparse import ArgumentParser
+
+import zmq
 
 from freedom.reco.crs_reco import start_service, adjust_addr_string
 from freedom.reco.i3freedom import DEFAULT_SEARCH_LIMITS
 
 ctrl_addr = "tcp://127.0.0.1:9887"
 req_addr = "tcp://127.0.0.1:10101"
+
+
+def kill_service(ctrl_addr):
+    with zmq.Context.instance().socket(zmq.REQ) as sock:
+        sock.setsockopt(zmq.LINGER, 0)
+        sock.setsockopt(zmq.RCVTIMEO, 1000)
+        sock.connect(ctrl_addr)
+
+        sock.send_string("die")
+
+        try:
+            print(f"service response: {sock.recv_string()}")
+        except zmq.error.Again:
+            print("No response from the LLH service")
 
 
 def build_service_conf(hitnet, chargenet, theta_prior, t_prior):
@@ -62,6 +78,9 @@ def main():
     parser.add_argument(
         "--cuda_device", type=int, required=True, help="""cuda device index"""
     )
+    parser.add_argument(
+        "--kill", action="store_true", help="""kill a running LLH service"""
+    )
 
     args = parser.parse_args()
 
@@ -72,14 +91,18 @@ def main():
         args.hitnet, args.chargenet, args.theta_prior, args.t_prior
     )
 
-    print(f"Starting service at {adj_ctrl_addr}")
+    if args.kill:
+        print(f"Killing service at {adj_ctrl_addr}")
+        kill_service(adj_ctrl_addr)
+    else:
+        print(f"Starting service at {adj_ctrl_addr}")
 
-    start_service(
-        service_conf,
-        ctrl_addr=adj_ctrl_addr,
-        req_addr=adj_req_addr,
-        cuda_device=args.cuda_device,
-    )
+        start_service(
+            service_conf,
+            ctrl_addr=adj_ctrl_addr,
+            req_addr=adj_req_addr,
+            cuda_device=args.cuda_device,
+        )
 
 
 if __name__ == "__main__":

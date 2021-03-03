@@ -1,4 +1,8 @@
+#!/bin/sh /cvmfs/icecube.opensciencegrid.org/py3-v4.1.0/icetray-start
+#METAPROJECT combo/stable
+
 """Reconstruct events with the I3FreedomClient"""
+
 import pkg_resources
 import sys
 from argparse import ArgumentParser
