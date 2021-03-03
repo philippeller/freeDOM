@@ -11,5 +11,5 @@ Use the [wiki](https://github.com/philippeller/freeDOM/wiki) for things other th
 
 It is recommended to install in-place, i.e.:
 ```
-pip install --editable .
+pip install --editable .[full]
 ```

@@ -19,16 +19,29 @@ def get_dist(pkgname):
         return None
 
 
+# the bare minimum required to run an LLH client
 install_requires = [
+    "scipy",
+    "numpy",
+    "pyzmq",
+    "spherical_opt @ git+https://github.com/philippeller/spherical_opt.git",
+]
+
+# the full installation
+full_requires = [
     "matplotlib>=2.0",
     "tensorflow>=2.1.0",
     "sklearn",
-    "scipy",
-    "numpy",
     "pyzmq>=19.0.1",
     "pandas",
-    "spherical_opt @ git+https://github.com/philippeller/spherical_opt.git"
 ]
+
+# If tensorflow-gpu is installed, use that
+if get_dist("tensorflow") is None and get_dist("tensorflow-gpu") is not None:
+    full_requires = [
+        pkg.replace("tensorflow", "tensorflow-gpu") for pkg in full_requires
+    ]
+extras_require = {"full": full_requires}
 
 # handle cython extension
 # adapted from https://stackoverflow.com/questions/2379898/make-distutils-look-for-numpy-header-files-in-the-correct-place
@@ -52,11 +65,13 @@ if zmq_lib is not None:
     zmq_lib = os.path.basename(zmq_lib)
     extra_link_args = [f"-l:{zmq_lib}"]
 
+
 extensions = [
     Extension(
         "freedom.llh_service.llh_cython",
         ["freedom/llh_service/llh_cython" + ext],
         extra_link_args=extra_link_args,
+        optional=True,
     )
 ]
 
@@ -81,12 +96,6 @@ class CustomBuildExtCommand(build_ext):
         build_ext.run(self)
 
 
-# If tensorflow-gpu is installed, use that
-if get_dist("tensorflow") is None and get_dist("tensorflow-gpu") is not None:
-    install_requires = [
-        pkg.replace("tensorflow", "tensorflow-gpu") for pkg in install_requires
-    ]
-
 setup(
     name="freedom",
     description=(
@@ -100,10 +109,11 @@ setup(
     python_requires=">=3.6",
     setup_requires=["pip>=1.8", "setuptools>18.5", "numpy>=1.11", "pyzmq>=19.0.1",],
     install_requires=install_requires,
+    extras_require=extras_require,
     packages=find_packages(),
     package_data={"freedom.resources": ["*.npy", "*.csv", "*.pkl", "*.hdf5"],},
     zip_safe=False,
     cmdclass={"build_ext": CustomBuildExtCommand},
     ext_modules=extensions,
-    entry_points={'console_scripts': ['freedom_crs_reco = freedom.reco.crs_reco:main']}
+    entry_points={"console_scripts": ["freedom_crs_reco = freedom.reco.crs_reco:main"]},
 )
