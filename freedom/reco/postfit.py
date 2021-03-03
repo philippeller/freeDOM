@@ -6,21 +6,13 @@ to provide alternative parameter estimates and uncertainty estimates
 __author__ = "Aaron Fienberg"
 
 import numpy as np
-import numpy.polynomial.polynomial as poly
+from numpy.polynomial import polynomial as poly, Polynomial
+from freedom.utils.i3frame_dataloader import DEFAULT_LABELS
 
 DELTA_LLH_CUT = 15
 DEFAULT_LOC_SPACING = (-1.5, 1.5, 10)
 DEFAULT_START_STEP = 0.05
-PAR_NAMES = [
-    "x",
-    "y",
-    "z",
-    "time",
-    "azimuth",
-    "zenith",
-    "cascade energy",
-    "track energy",
-]
+PAR_NAMES = DEFAULT_LABELS
 
 
 def calc_stats(all_pts, par_names, do_angles=True):
@@ -132,6 +124,30 @@ def fit_envelope(
     return poly.polyfit(xs, ys, 2), xs, ys
 
 
+def env_residual_rms(env, xs, ys):
+    """Calculate the RMS of the envelope fit residuals
+
+    Parameters
+    ----------
+    env : np.ndarray
+        envelope parameters (polynomial coefficients)
+    xs : list
+        x values for the envelope fit
+    ys : list
+        y values for the envelope fit
+
+    Returns
+    -------
+    float
+    """
+    xs = np.asarray(xs)
+    ys = np.asarray(ys)
+
+    resids = Polynomial(env)(xs) - ys
+
+    return np.std(resids)
+
+
 def calc_parabola_opt(quad_coeffs):
     """x value of the parabola optimum
 
@@ -218,6 +234,8 @@ def postfit(all_pts, par_names=PAR_NAMES, llh_cut=DELTA_LLH_CUT):
 
         env_rets.append(fit_envelope(par, cut_llhs, mean, std))
 
+    resid_rms = [env_residual_rms(env, xs, ys) for env, xs, ys in env_rets]
+
     envs, env_xs, env_ys = list(zip(*env_rets))
 
     env_mins = [calc_parabola_opt(env) for env in envs]
@@ -232,6 +250,7 @@ def postfit(all_pts, par_names=PAR_NAMES, llh_cut=DELTA_LLH_CUT):
         stds=stds,
         envs=envs,
         env_mins=env_mins,
+        env_resid_rms=resid_rms,
         #         env_xs=env_xs,
         #         env_ys=env_ys,
     )

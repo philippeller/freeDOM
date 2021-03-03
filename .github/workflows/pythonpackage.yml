@@ -29,7 +29,7 @@ jobs:
         pip install --no-binary=:all: pyzmq
         pip install Cython --install-option="--no-cython-compile"
         pip install flake8 pytest
-        pip install --editable .
+        pip install --editable .[full]
     - name: Lint with flake8
       run: |
         # stop the build if there are Python syntax errors or undefined names
