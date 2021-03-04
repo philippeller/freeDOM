@@ -507,37 +507,16 @@ class chargenet_trafo(tf.keras.layers.Layer):
         
         if charge.shape[1] == 2:
             out = tf.stack([
-                     charge[:,0],
-                     charge[:,1], #n_channels
-                     params[:, self.x_idx],
-                     params[:, self.y_idx],
-                     params[:, self.z_idx],
-                     dir_x,
-                     dir_y,
-                     dir_z,
-                     cascade_energy,
-                     track_energy,
-                    ],
-                    axis=1
-                    )
-        elif charge.shape[1] == 8:
-            out = tf.stack([
-                     charge[:,0],
-                     charge[:,1], #n_channels
-                     charge[:,2], #x c mean
-                     charge[:,3], #y c mean
-                     charge[:,4], #z c mean
-                     charge[:,5], #x c std
-                     charge[:,6], #y c std
-                     charge[:,7], #z c std
-                     params[:, self.x_idx] - charge[:,2],
-                     params[:, self.y_idx] - charge[:,3],
-                     params[:, self.z_idx] - charge[:,4],
-                     dir_x,
-                     dir_y,
-                     dir_z,
-                     cascade_energy,
-                     track_energy,
+                     charge[:,0]/2.0e4,
+                     charge[:,1]/5.41e2, #n_channels
+                     (params[:, self.x_idx]+750)/1.576e3,
+                     (params[:, self.y_idx]+805)/1.577e3,
+                     (params[:, self.z_idx]+1115)/1.538e3,
+                     (dir_x+1)/2.,
+                     (dir_y+1)/2.,
+                     (dir_z+1)/2.,
+                     (cascade_energy+2.2)/11.44,
+                     (track_energy+2.3)/11.49,
                     ],
                     axis=1
                     )
