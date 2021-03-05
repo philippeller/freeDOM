@@ -28,9 +28,9 @@ Generate a list(s) of files to be reco'ed, typically with 50-100 i3 file paths e
 python make_file_lists.py -n 100 -p file_list "/some_path/oscNext/level7_v01.04/120000/*.i3.zst"
 ```
 
-Launch the reconstruction of i3 paths in a given file list by:
+Launch the reconstruction of i3 paths in a given file list by (the first argument, here `0`, is the GPU number):
 ```
-./run_i3_reco.sh 3 file_list_0.txt /path_to_outdir
+./run_i3_reco.sh 0 file_list_0.txt /path_to_outdir
 ```
 Go drink a coffee or two and wait...
 
