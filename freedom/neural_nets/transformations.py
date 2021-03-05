@@ -182,10 +182,10 @@ class hitnet_trafo(tf.keras.layers.Layer):
         # so it is 0 at the poles?
         absdeltaphidir *= sintheta * sinthetadir
         
-        #dt = hit[:,3] - params[:, self.time_idx]
+        dt = hit[:,3] - params[:, self.time_idx]
         ## difference c*t - r
-        #delta = dt * self.speed_of_light - dist
-        delta = self.TimeResidual(hit, params)
+        delta = dt * self.speed_of_light - dist
+        tres = self.TimeResidual(hit, params)
 
         cascade_energy = tf.math.log(tf.clip_by_value(params[:, self.cascade_energy_idx], self.min_energy, self.max_energy))
         track_energy = tf.math.log(tf.clip_by_value(params[:, self.track_energy_idx], self.min_energy, self.max_energy))
@@ -198,8 +198,8 @@ class hitnet_trafo(tf.keras.layers.Layer):
             cos_pmtd = (pmt_x*dx + pmt_y*dy + pmt_z*dz)/(dist) # pmt looks to event?
             cos_dird = (dir_x*dx + dir_y*dy + dir_z*dz)/(dist) # event flies to pmt?
             
-            out = [delta, dist, costhetadir, absdeltaphidir, dir_x, dir_y, dir_z, dx, dy, dz, hit[:,0], hit[:,1], hit[:,2],
-                   hit[:,5], hit[:,6], cos_pmtd, cos_dird, cascade_energy, track_energy] #hit[:,7], hit[:,8]
+            out = [tres, dist, costhetadir, absdeltaphidir, dir_x, dir_y, dir_z, dx, dy, dz, delta, 
+                   hit[:,0], hit[:,1], hit[:,2], hit[:,5], hit[:,6], cos_pmtd, cos_dird] #, cascade_energy, track_energy
         else:
             out = [delta, dist, costhetadir, absdeltaphidir, dir_x, dir_y, dir_z, dx, dy, dz, hit[:,0], hit[:,1], hit[:,2],
                    hit[:,5], hit[:,6], cascade_energy, track_energy]
@@ -507,16 +507,16 @@ class chargenet_trafo(tf.keras.layers.Layer):
         
         if charge.shape[1] == 2:
             out = tf.stack([
-                     charge[:,0],
-                     charge[:,1], #n_channels
-                     params[:, self.x_idx],
-                     params[:, self.y_idx],
-                     params[:, self.z_idx],
-                     dir_x,
-                     dir_y,
-                     dir_z,
-                     cascade_energy,
-                     track_energy,
+                     charge[:,0]/2.0e4,
+                     charge[:,1]/5.41e2, #n_channels
+                     (params[:, self.x_idx]+750)/1.576e3,
+                     (params[:, self.y_idx]+805)/1.577e3,
+                     (params[:, self.z_idx]+1115)/1.538e3,
+                     (dir_x+1)/2.,
+                     (dir_y+1)/2.,
+                     (dir_z+1)/2.,
+                     (cascade_energy+2.2)/11.44,
+                     (track_energy+2.3)/11.49,
                     ],
                     axis=1
                     )
