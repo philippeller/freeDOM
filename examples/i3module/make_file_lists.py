@@ -1,4 +1,5 @@
 """Generate input file lists to use with run_i3_reco.sh """
+import glob
 from argparse import ArgumentParser
 
 
@@ -9,6 +10,7 @@ def make_file_list(ofilename, files):
 
 
 def make_file_lists(n_per_list, prefix, files):
+    files = glob.glob(files)
     file_splits = (files[i : i + n_per_list] for i in range(0, len(files), n_per_list))
     for i, file_split in enumerate(file_splits):
         make_file_list(f"{prefix}_{i}.txt", file_split)
@@ -26,7 +28,7 @@ def main():
         default="test_list",
         help="""output file name prefix""",
     )
-    parser.add_argument("files", nargs="+", help="""Files to split into file lists""")
+    parser.add_argument("files", help="""Files to split into file lists""")
 
     args = parser.parse_args()
 
