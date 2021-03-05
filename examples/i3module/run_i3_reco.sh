@@ -45,3 +45,5 @@ echo "Jobs done. Killing the LLH services"
 python service_control.py --ctrl_addr "$ctrl_addr" --kill &
 
 wait
+
+rm $tmpfile
