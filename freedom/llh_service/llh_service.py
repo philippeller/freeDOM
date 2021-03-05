@@ -18,7 +18,6 @@ import numpy as np
 from scipy.interpolate import UnivariateSpline
 import pickle
 
-# import numba
 import tensorflow as tf
 import tensorflow_addons as tfa
 import zmq
@@ -246,7 +245,7 @@ class LLHService:
             n_hypo_params=n_hypo_params,
             n_hit_features=n_hit_features,
             n_evt_features=n_evt_features,
-            req_addr=req_addr,
+            req_addr=self._req_sock.getsockopt(zmq.LAST_ENDPOINT).decode(),
         )
 
         # # jit compile self._fill_tables
@@ -287,6 +286,10 @@ class LLHService:
 
             if time.time() - self._last_flush > flush_period:
                 self._flush()
+
+    @property
+    def ctrl_addr(self):
+        return self._ctrl_sock.getsockopt(zmq.LAST_ENDPOINT).decode()
 
     def _init_sockets(self, req_addr, ctrl_addr, send_hwm, recv_hwm, router_mandatory):
         # pylint: disable=no-member
@@ -394,7 +397,6 @@ class LLHService:
             stop_hypo_ind,
             header_frames,
         )
-        # self._numba_record_req(x, thetas, next_ind, hypo_ind, header_frames)
 
     # @profile
     def _record_req(
@@ -433,49 +435,6 @@ class LLHService:
         self._work_reqs.append(work_item_dict)
         self._next_table_ind = stop_ind
         self._next_hypo_ind = stop_hypo_ind
-
-    #     # @profile
-    #     def _numba_record_req(self, x, thetas, next_ind, hypo_ind, header_frames):
-    #         self._fill_tables(
-    #             self._hit_table,
-    #             self._theta_table,
-    #             self._stop_inds,
-    #             x,
-    #             thetas,
-    #             next_ind,
-    #             hypo_ind,
-    #         )
-
-    #         stop_hypo_ind = hypo_ind + len(thetas)
-
-    #         # record work request information
-    #         work_item_dict = dict(
-    #             header_frames=header_frames, start_ind=hypo_ind, stop_ind=stop_hypo_ind,
-    #         )
-    #         self._work_reqs.append(work_item_dict)
-    #         self._next_table_ind = next_ind + len(x) * len(thetas)
-    #         self._next_hypo_ind = stop_hypo_ind
-
-    #     @staticmethod
-    #     @numba.njit
-    #     def _fill_tables(x_table, theta_table, stop_inds, x, thetas, next_ind, hypo_ind):
-
-    #         batch_size = len(thetas)
-    #         n_obs = len(x)
-
-    #         # fill table with observations and hypothesis parameters
-    #         for i in range(batch_size):
-    #             start = next_ind + i * n_obs
-    #             stop = start + n_obs
-    #             x_table[start:stop] = x
-
-    #         theta_table[hypo_ind : hypo_ind + batch_size] = thetas
-
-    #         # update stop indices
-    #         next_stop = next_ind + n_obs
-    #         stop_inds[hypo_ind : hypo_ind + batch_size] = np.arange(
-    #             next_stop, next_stop + n_obs * batch_size, n_obs
-    #         )
 
     # @profile
     def _process_reqs(self):
