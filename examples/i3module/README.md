@@ -1,6 +1,6 @@
 # How to reconstrcut i3 files, a recipe
 
-## Getting setup
+## Getting set up
 
 1. In an Icetray environement, install freeDOM light version, e.g:
 ```
@@ -11,7 +11,7 @@ pip install --user --editable .
 ```
 
 
-2. exit icetray and start fresh (otherwise env variables stick around)
+2. Exit icetray and start fresh (otherwise env variables stick around).
 Now in your python installation where you want to run tensorflow, do a full install
 
 ```
@@ -23,13 +23,15 @@ adjust paths in `freeDOM/examples/i3module/service_control.py`
 
 ## Reco'ing files
 
-generate a list(s) of files to be reco'ed, typically with 50-100 i3 file paths each, for example with the script `freeDOM/examples/i3module/make_file_lists.py`
+Generate a list(s) of files to be reco'ed, typically with 50-100 i3 file paths each, for example with the script `freeDOM/examples/i3module/make_file_lists.py`
 ```
 python make_file_lists.py -n 100 -p file_list "/some_path/oscNext/level7_v01.04/120000/*.i3.zst"
 ```
 
-launch the reconstruction of i3 paths in a given file list by:
+Launch the reconstruction of i3 paths in a given file list by:
 ```
 ./run_i3_reco.sh 3 file_list_0.txt /path_to_outdir
 ```
 Go drink a coffee or two and wait...
+
+(For testing, or processing partial files, you can specify `--n_frames N`, where N could be 13, as an option to `i3_reco.py`, e.g. in `run_i3_reco.sh`)
