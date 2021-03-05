@@ -1,4 +1,4 @@
-# How to reconstrcut i3 files, a recipe
+# How to reconstruct i3 files, a recipe
 
 ## Getting set up
 
