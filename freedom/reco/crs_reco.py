@@ -223,7 +223,10 @@ def start_service(params, ctrl_addr, req_addr, cuda_device):
     params["req_addr"] = req_addr
 
     with LLHService(**params) as serv:
-        print(f"starting service work loop for cuda device {cuda_device}...")
+        print(
+            f"starting service work loop for cuda device {cuda_device} at ctrl_addr {serv.ctrl_addr}",
+            flush=True,
+        )
         serv.start_work_loop()
 
 
