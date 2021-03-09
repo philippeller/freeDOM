@@ -31,8 +31,9 @@ input_files=($(cat $input_file_list))
 for file in ${input_files[@]}; do
     output_file=`basename $file`
     output_file=`readlink -m $output_dir/${output_file%.i3.zst}_reco.i3.zst`
-    ./i3_reco.py --n_frames 12 --input_files $file --output_file $output_file --service_addr "$ctrl_addr" &
+    ./i3_reco.py --input_files $file --output_file $output_file --service_addr "$ctrl_addr" &
     pids+=($!)
+    # --n_frames 33
 done
 
 echo "Jobs launched"

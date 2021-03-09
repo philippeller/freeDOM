@@ -33,7 +33,7 @@ def build_service_conf(hitnet, chargenet, theta_prior, t_prior):
         "n_hypo_params": 8,
         "n_hit_features": 10,
         "n_evt_features": 2,
-        "batch_size": {"n_hypos": 200, "n_observations": 6000},
+        "batch_size": {"n_hypos": 400, "n_observations": 12000},
         "send_hwm": 10000,
         "recv_hwm": 10000,
         "hitnet_file": hitnet,
@@ -54,25 +54,27 @@ def main():
     parser.add_argument(
         "--hitnet",
         type=str,
-        default="/home/atfienberg/freedomDataCopy/resources/HitNet_ranger_total_11_Feb_2021-10h09/epoch_32_model.hdf5",
+        default="/cvmfs/icecube.opensciencegrid.org/users/peller/freeDOM/resources/HitNet_ranger_total_11_Feb_2021-10h09/epoch_32_model.hdf5",
         help="""hitnet file path""",
     )
     parser.add_argument(
         "--chargenet",
         type=str,
-        default="/home/atfienberg/freedomDataCopy/resources/ChargeNet_normed_21_Feb_2021-18h14/epoch_1000_model.hdf5",
+        default="/cvmfs/icecube.opensciencegrid.org/users/peller/freeDOM/resources/ChargeNet_normed_21_Feb_2021-18h14/epoch_1000_model.hdf5",
         help="""chargenet file path""",
     )
     parser.add_argument(
         "--theta_prior",
         type=str,
-        default="/home/atfienberg/IceCube/freeDOM/freedom/resources/prior/oscNext_theta_prior_norm.hdf5",
+        #default="/home/atfienberg/IceCube/freeDOM/freedom/resources/prior/oscNext_theta_prior_norm.hdf5",
+        default="/home/iwsatlas1/peller/freeDOM/freedom/resources/prior/oscNext_theta_prior_norm.hdf5",
         help="""theta prior file path""",
     )
     parser.add_argument(
         "--t_prior",
         type=str,
-        default="/home/atfienberg/IceCube/freeDOM/freedom/resources/prior/oscNext_time_residual_prior.pkl",
+        #default="/home/atfienberg/IceCube/freeDOM/freedom/resources/prior/oscNext_time_residual_prior.pkl",
+        default="/home/iwsatlas1/peller/freeDOM/freedom/resources/prior/oscNext_time_residual_prior.pkl",
         help="""time prior file path""",
     )
     parser.add_argument(
