@@ -32,13 +32,14 @@ from freedom.reco import summary_df
 from freedom.reco import prefit, postfit
 
 
-def get_batch_closure(clients, event, out_of_bounds):
+def get_batch_closure(clients, event, out_of_bounds, seed): #
     """returns LLH batch eval closure for this event. The closure is a function of one argument: the hypotheses to evaluate"""
     hit_data = event["hit_data"]
     evt_data = event["evt_data"]
 
     def eval_llh(params):
         llhs = 0
+        #params = np.hstack((params, np.tile(seed[-2:], (len(params),1)))) #event['params']
         for i in range(len(clients)):
             llhs += np.atleast_1d(clients[i].eval_llh(hit_data[i], evt_data[i], params))
 
@@ -65,12 +66,13 @@ def batch_crs_fit(
     do_postfit=False,
     store_all=False,
     truth_seed=False,
+    seed=None,
     **sph_opt_kwargs,
 ):
 
     out_of_bounds = bounds.get_out_of_bounds_func(search_limits, bounds_check_type)
 
-    eval_llh = get_batch_closure(clients, event, out_of_bounds)
+    eval_llh = get_batch_closure(clients, event, out_of_bounds, seed) #
 
     n_params = len(init_range)
 
@@ -88,6 +90,8 @@ def batch_crs_fit(
 
     if truth_seed:
         box_limits = prefit.truth_seed_box(event["params"], init_range)
+    elif np.all(seed) != None:
+        box_limits = prefit.truth_seed_box(seed, init_range)
     else:
         box_limits = prefit.initial_box(all_hits, init_range, n_params=n_params)
 
@@ -100,11 +104,13 @@ def batch_crs_fit(
 
     if truth_seed:
         initial_points[-1] = event["params"]
+    elif np.all(seed) != None:
+        initial_points[-1] = seed
 
     opt_ret = spherical_opt.spherical_opt(
         func=eval_llh,
         method="CRS2",
-        initial_points=initial_points,
+        initial_points=initial_points, #[:, :-2]
         rand=rng,
         **sph_opt_kwargs,
     )
@@ -130,6 +136,7 @@ def fit_events(
     do_postfit=False,
     store_all=False,
     truth_seed=False,
+    seeds=None,
     **sph_opt_kwargs,
 ):
     rng = np.random.default_rng(random_seed)
@@ -140,8 +147,11 @@ def fit_events(
     # clients = [] # use this for ICU reco
     # for i in range(3):
     #    clients.append(LLHClient(ctrl_addr=ctrl_addrs[i], conf_timeout=conf_timeout))
+    
+    if np.all(seeds) == None:
+        seeds = [None] * len(events)
 
-    for event in events:
+    for j, event in enumerate(events):
         start = time.time()
         fit_res = batch_crs_fit(
             event,
@@ -153,6 +163,7 @@ def fit_events(
             do_postfit=do_postfit,
             store_all=store_all,
             truth_seed=truth_seed,
+            seed=seeds[j],
             **sph_opt_kwargs,
         )
         delta = time.time() - start
