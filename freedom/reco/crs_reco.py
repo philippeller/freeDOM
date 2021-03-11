@@ -100,7 +100,7 @@ def batch_crs_fit(
     initial_points = box_limits[:, 0] + uniforms * (box_limits[:, 1] - box_limits[:, 0])
 
     # for non truth seed, convert from cos zenith to zenith
-    if not truth_seed:
+    if not truth_seed and np.all(seed) == None:
         initial_points[:, 5] = np.arccos(initial_points[:, 5])
 
     # energy parameters need to be converted from log energy to energy
