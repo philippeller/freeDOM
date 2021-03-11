@@ -99,6 +99,10 @@ def batch_crs_fit(
 
     initial_points = box_limits[:, 0] + uniforms * (box_limits[:, 1] - box_limits[:, 0])
 
+    # for non truth seed, convert from cos zenith to zenith
+    if not truth_seed:
+        initial_points[:, 5] = np.arccos(initial_points[:, 5])
+
     # energy parameters need to be converted from log energy to energy
     initial_points[:, 6:] = 10 ** initial_points[:, 6:]
 
@@ -234,7 +238,10 @@ def start_service(params, ctrl_addr, req_addr, cuda_device):
     params["req_addr"] = req_addr
 
     with LLHService(**params) as serv:
-        print(f"starting service work loop for cuda device {cuda_device}...")
+        print(
+            f"starting service work loop for cuda device {cuda_device} at ctrl_addr {serv.ctrl_addr}",
+            flush=True,
+        )
         serv.start_work_loop()
 
 
