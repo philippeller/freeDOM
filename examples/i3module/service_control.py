@@ -7,6 +7,7 @@ import zmq
 
 from freedom.reco.crs_reco import start_service, adjust_addr_string
 from freedom.reco.i3freedom import DEFAULT_SEARCH_LIMITS
+from freedom.neural_nets.transformations import prior_trafo
 
 ctrl_addr = "tcp://127.0.0.1:*"
 req_addr = "tcp://127.0.0.1:*"
@@ -41,10 +42,11 @@ def build_service_conf(hitnet, chargenet, theta_prior, t_prior):
         "boundary_guard": {
             "file": theta_prior,
             "param_limits": DEFAULT_SEARCH_LIMITS,
-            "bg_lim": -10,
+            "bg_lim": 0,
             "invalid_llh": 1e9,
-            "prior": True,
+            "prior": False,
             "Tprior": t_prior,
+            "custom_objects": {'prior_trafo': prior_trafo}
         },
     }
 

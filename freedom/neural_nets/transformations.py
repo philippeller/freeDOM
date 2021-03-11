@@ -195,8 +195,8 @@ class hitnet_trafo(tf.keras.layers.Layer):
             pmt_y = tf.math.sin(hit[:,7]) * tf.math.sin(hit[:,8])
             pmt_z = tf.math.cos(hit[:,7])
             
-            cos_pmtd = (pmt_x*dx + pmt_y*dy + pmt_z*dz)/(dist) # pmt looks to event?
-            cos_dird = (dir_x*dx + dir_y*dy + dir_z*dz)/(dist) # event flies to pmt?
+            cos_pmtd = tf.clip_by_value((pmt_x*dx + pmt_y*dy + pmt_z*dz)/(dist), -1, 1) # pmt looks to event?
+            cos_dird = tf.clip_by_value((dir_x*dx + dir_y*dy + dir_z*dz)/(dist), -1, 1) # event flies to pmt?
             
             out = [tres, dist, costhetadir, absdeltaphidir, dir_x, dir_y, dir_z, dx, dy, dz, delta, 
                    hit[:,0], hit[:,1], hit[:,2], hit[:,5], hit[:,6], cos_pmtd, cos_dird] #, cascade_energy, track_energy
@@ -540,6 +540,37 @@ class chargenet_trafo(tf.keras.layers.Layer):
                     axis=1
                     )
 
+        return out
+    
+class prior_trafo(tf.keras.layers.Layer):
+    def __init__(self, **kwargs):        
+        super().__init__()
+
+    def call(self, params):
+        PI = tf.constant(constants.pi)
+        dir_x = (tf.math.sin(params[:, 5]*PI) * tf.math.cos(params[:, 4]*2*PI) + 1.) / 2.
+        dir_y = (tf.math.sin(params[:, 5]*PI) * tf.math.sin(params[:, 4]*2*PI) + 1.) / 2.
+        dir_z = (tf.math.cos(params[:, 5]*PI) + 1.) / 2.
+
+        cascade_energy = tf.math.log(tf.clip_by_value(1e3*params[:, 6], 0.1, 1.05e3))
+        cascade_energy = (cascade_energy - tf.math.log(0.1)) / (tf.math.log(1e3)-tf.math.log(0.1))
+        track_energy = tf.math.log(tf.clip_by_value(1e3*params[:, 7], 0.1, 1.05e3))
+        track_energy = (track_energy - tf.math.log(0.1)) / (tf.math.log(1e3)-tf.math.log(0.1))
+        
+        out = tf.stack([
+                 params[:,0],
+                 params[:,1],
+                 params[:,2],
+                 params[:,3],
+                 dir_x,
+                 dir_y,
+                 dir_z,
+                 cascade_energy,
+                 track_energy,
+                ],
+                axis=1
+                )    
+            
         return out
 
 
