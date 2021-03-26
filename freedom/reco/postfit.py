@@ -7,6 +7,7 @@ __author__ = "Aaron Fienberg"
 
 import numpy as np
 from numpy.polynomial import polynomial as poly, Polynomial
+from scipy.spatial import ConvexHull
 from freedom.utils.i3frame_dataloader import DEFAULT_LABELS
 
 DELTA_LLH_CUT = 15
@@ -124,6 +125,46 @@ def fit_envelope(
     return poly.polyfit(xs, ys, 2), xs, ys
 
 
+def hull_area(par, llhs, above_min=1):
+    """Estimate projected area of llh minimum for single parameter
+
+    Parameters
+    ----------
+    par : np.ndarray
+        the parameter values
+    llhs : np.ndarray
+        the llh values
+
+    Returns
+    -------
+    float
+    """
+    min_llh = llhs.min()
+    Hull = ConvexHull(np.stack([par, llhs]).T[llhs < min_llh+above_min])
+    
+    return Hull.volume
+
+
+def furthest_point(par, llhs, above_min=2):
+    """Estimate uncertainty based on simplex point furthest away from min
+
+    Parameters
+    ----------
+    par : np.ndarray
+        the parameter values
+    llhs : np.ndarray
+        the llh values
+
+    Returns
+    -------
+    float
+    """
+    min_llh = llhs.min()
+    min_par = par[np.argmin(llhs)]
+    
+    return np.max(np.abs(min_par - par[llhs<min_llh+2]))
+
+
 def env_residual_rms(env, xs, ys):
     """Calculate the RMS of the envelope fit residuals
 
@@ -226,13 +267,15 @@ def postfit(all_pts, par_names=PAR_NAMES, llh_cut=DELTA_LLH_CUT):
     stds = np.sqrt(variances)
 
     par_samps = [p for p in cut_pts[:, :-1].T]
-    env_rets = []
+    env_rets, hull_areas, furthest_points = [], [], []
     for par, mean, std, name in zip(par_samps, means, stds, par_names):
         # adjust azimuth samples before attempting to fit the envelope
         if name == "azimuth":
             par = adjust_angle_samples(par, mean)
 
         env_rets.append(fit_envelope(par, cut_llhs, mean, std))
+        hull_areas.append(hull_area(par, cut_llhs))
+        furthest_points.append(furthest_point(par, cut_llhs))
 
     resid_rms = [env_residual_rms(env, xs, ys) for env, xs, ys in env_rets]
 
@@ -251,6 +294,8 @@ def postfit(all_pts, par_names=PAR_NAMES, llh_cut=DELTA_LLH_CUT):
         envs=envs,
         env_mins=env_mins,
         env_resid_rms=resid_rms,
+        hull_areas=hull_areas,
+        furthest_points=furthest_points,
         #         env_xs=env_xs,
         #         env_ys=env_ys,
     )

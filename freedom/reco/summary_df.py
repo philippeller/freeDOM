@@ -63,6 +63,8 @@ def add_postfit_res(df_dict, all_outs, par_names):
     env_ests = [[] for _ in par_names]
     curvatures = [[] for _ in par_names]
     stds = [[] for _ in par_names]
+    hull_areas = [[] for _ in par_names]
+    furthest_points = [[] for _ in par_names]
 
     for out in all_outs:
         pf = out[0]["postfit"]
@@ -71,9 +73,13 @@ def add_postfit_res(df_dict, all_outs, par_names):
             env_ests[i].append(pf["env_mins"][i])
             curvatures[i].append(pf["envs"][i][2])
             stds[i].append(pf["stds"][i])
+            hull_areas[i].append(pf["hull_areas"][i])
+            furthest_points[i].append(pf["furthest_points"][i])
 
     for i, name in enumerate(par_names):
         df_dict[f"{name}_mean"] = mean_ests[i]
         df_dict[f"{name}_env_est"] = env_ests[i]
         df_dict[f"{name}_curvature"] = curvatures[i]
         df_dict[f"{name}_std"] = stds[i]
+        df_dict[f"{name}_hull_area"] = hull_areas[i]
+        df_dict[f"{name}_furthest_point"] = furthest_points[i]
