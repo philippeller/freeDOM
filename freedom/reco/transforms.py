@@ -19,14 +19,14 @@ def param_transform(f):
     ensures params are copied before transformation"""
 
     @functools.wraps(f)
-    def trans(params):
+    def trans(params, *args, **kwargs):
         params = np.atleast_1d(params)
 
         orig_shape = params.shape
         if len(orig_shape) == 1:
             params = params[np.newaxis, :]
 
-        trans_params = f(np.copy(params))
+        trans_params = f(np.copy(params), *args, **kwargs)
 
         return trans_params.reshape(orig_shape)
 
