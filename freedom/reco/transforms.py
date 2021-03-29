@@ -61,6 +61,10 @@ def inv_track_fraction_transform(
     return params
 
 
+track_frac_names = DEFAULT_LABELS[:6] + ["total_energy", "track_frac"]
+
 track_frac_transforms = dict(
-    trans=track_fraction_transform, inv_trans=inv_track_fraction_transform
+    trans=track_fraction_transform,
+    inv_trans=inv_track_fraction_transform,
+    par_names=track_frac_names,
 )
