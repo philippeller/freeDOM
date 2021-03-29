@@ -32,17 +32,24 @@ from freedom.reco import summary_df
 from freedom.reco import prefit, postfit
 
 
-def get_batch_closure(clients, event, out_of_bounds):
+def get_batch_closure(clients, event, out_of_bounds, param_transform=None):
     """returns LLH batch eval closure for this event. The closure is a function of one argument: the hypotheses to evaluate"""
     hit_data = event["hit_data"]
     evt_data = event["evt_data"]
 
     def eval_llh(params):
+        if param_transform is not None:
+            trans_params = param_transform(params)
+        else:
+            trans_params = params
+
         llhs = 0
         for i in range(len(clients)):
-            llhs += np.atleast_1d(clients[i].eval_llh(hit_data[i], evt_data[i], params))
+            llhs += np.atleast_1d(
+                clients[i].eval_llh(hit_data[i], evt_data[i], trans_params)
+            )
 
-        llhs = bounds.invalid_replace(llhs, params, out_of_bounds)
+        llhs = bounds.invalid_replace(llhs, trans_params, out_of_bounds)
 
         for param, llh in zip(params, llhs):
             eval_llh.evaluated_pts.append(np.hstack((param, [llh])))
@@ -65,12 +72,20 @@ def batch_crs_fit(
     do_postfit=False,
     store_all=False,
     truth_seed=False,
+    transforms=None,
     **sph_opt_kwargs,
 ):
 
     out_of_bounds = bounds.get_out_of_bounds_func(search_limits, bounds_check_type)
 
-    eval_llh = get_batch_closure(clients, event, out_of_bounds)
+    if transforms is None:
+        trans = None
+        inv_trans = None
+    else:
+        trans = transforms["trans"]
+        inv_trans = transforms["inv_trans"]
+
+    eval_llh = get_batch_closure(clients, event, out_of_bounds, trans)
 
     n_params = len(init_range)
 
@@ -105,6 +120,9 @@ def batch_crs_fit(
     if truth_seed:
         initial_points[-1] = event["params"]
 
+    if inv_trans is not None:
+        initial_points = inv_trans(initial_points)
+
     opt_ret = spherical_opt.spherical_opt(
         func=eval_llh,
         method="CRS2",
@@ -134,6 +152,7 @@ def fit_events(
     do_postfit=False,
     store_all=False,
     truth_seed=False,
+    transforms=None,
     **sph_opt_kwargs,
 ):
     rng = np.random.default_rng(random_seed)
@@ -157,6 +176,7 @@ def fit_events(
             do_postfit=do_postfit,
             store_all=store_all,
             truth_seed=truth_seed,
+            transforms=transforms,
             **sph_opt_kwargs,
         )
         delta = time.time() - start
@@ -193,6 +213,7 @@ def fit_event(
     do_postfit=False,
     store_all=False,
     truth_seed=False,
+    transforms=None,
     **sph_opt_kwargs,
 ):
     """wrapper around fit_events to fit a single event"""
@@ -207,6 +228,7 @@ def fit_event(
         do_postfit=do_postfit,
         store_all=store_all,
         truth_seed=truth_seed,
+        transforms=transforms,
         **sph_opt_kwargs,
     )[0]
 
