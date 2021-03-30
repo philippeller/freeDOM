@@ -68,3 +68,28 @@ track_frac_transforms = dict(
     inv_trans=inv_track_fraction_transform,
     par_names=track_frac_names,
 )
+
+
+def insert_fixed_params(params, fixed_params):
+    """ takes param proposal from an optimizer and inserts externally fixed parameters 
+    
+    Parameters
+    ----------
+    params : np.ndarray
+    fixed_params : list of tuples
+        tuples are of form (par_index, val_to_fix)
+    """
+    params = np.atleast_2d(params)
+
+    full_params = np.empty((params.shape[0], len(DEFAULT_LABELS)), dtype=params.dtype)
+
+    fix_inds = []
+    for ind, val in fixed_params:
+        full_params[:, ind] = val
+        fix_inds.append(ind)
+
+    free_inds = (i for i in range(full_params.shape[1]) if i not in fix_inds)
+    for free_ind, param in zip(free_inds, params.T):
+        full_params[:, free_ind] = param
+
+    return full_params

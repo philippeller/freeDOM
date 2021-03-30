@@ -30,18 +30,64 @@ from freedom.utils import i3cols_dataloader
 from freedom.reco import bounds
 from freedom.reco import summary_df
 from freedom.reco import prefit, postfit
+from freedom.reco import transforms
+
+DEFAULT_INIT_RANGE = np.array(
+    [
+        [-50.0, 50.0],
+        [-50.0, 50.0],
+        [-100.0, 100.0],
+        [-1000.0, 0.0],
+        [0.0, 2 * math.pi],
+        [-1, 1],
+        [0.0, 1.7],
+        [0.0, 1.7],
+    ]
+)
+DEFAULT_SEARCH_LIMITS = np.array(
+    [
+        [-500, 500],
+        [-500, 500],
+        [-1000, 700],
+        [800, 20000],
+        [0, 2 * math.pi],
+        [0, math.pi],
+        [0.1, 1000],
+        [0, 1000],
+    ]
+).T
 
 
-def get_batch_closure(clients, event, out_of_bounds, param_transform=None):
-    """returns LLH batch eval closure for this event. The closure is a function of one argument: the hypotheses to evaluate"""
+def get_batch_closure(
+    clients, event, out_of_bounds, param_transform=None, fixed_params=None
+):
+    """returns LLH batch eval closure for this event. 
+
+    The closure is a function of one argument: the hypotheses to evaluate
+
+    Parameters
+    ----------
+    clients : list of LLHClients
+    event : dict
+    out_of_bounds : callable
+    param_transform : dict
+    fixed_params : list of tuples
+        tuples are of form (par_index, val_to_fix)
+    """
+
     hit_data = event["hit_data"]
     evt_data = event["evt_data"]
 
     def eval_llh(params):
-        if param_transform is not None:
-            trans_params = param_transform(params)
+        if fixed_params is not None:
+            full_params = transforms.insert_fixed_params(params, fixed_params)
         else:
-            trans_params = params
+            full_params = params
+
+        if param_transform is not None:
+            trans_params = param_transform(full_params)
+        else:
+            trans_params = full_params
 
         llhs = 0
         for i in range(len(clients)):
@@ -65,14 +111,16 @@ def batch_crs_fit(
     event,
     clients,
     rng,
-    init_range,
-    search_limits,
-    n_live_points,
+    init_range=DEFAULT_INIT_RANGE,
+    search_limits=DEFAULT_SEARCH_LIMITS,
+    n_live_points=None,
     bounds_check_type="cube",
     do_postfit=False,
     store_all=False,
     truth_seed=False,
     transforms=None,
+    fixed_params=None,
+    initial_points=None,
     **sph_opt_kwargs,
 ):
 
@@ -85,7 +133,7 @@ def batch_crs_fit(
         trans = transforms["trans"]
         inv_trans = transforms["inv_trans"]
 
-    eval_llh = get_batch_closure(clients, event, out_of_bounds, trans)
+    eval_llh = get_batch_closure(clients, event, out_of_bounds, trans, fixed_params)
 
     n_params = len(init_range)
 
@@ -101,27 +149,35 @@ def batch_crs_fit(
     if len(all_hits) == 0:
         all_hits = np.array([[0, 0, -500, 9500, 1]])
 
-    if truth_seed:
-        box_limits = prefit.truth_seed_box(event["params"], init_range)
-    else:
-        box_limits = prefit.initial_box(all_hits, init_range, n_params=n_params)
+    if initial_points is None:
+        if n_live_points is None:
+            raise ValueError(
+                "'n_live_points' must be specified when 'initial_points' is not set!"
+            )
 
-    uniforms = rng.uniform(size=(n_live_points, n_params))
+        if truth_seed:
+            box_limits = prefit.truth_seed_box(event["params"], init_range)
+        else:
+            box_limits = prefit.initial_box(all_hits, init_range, n_params=n_params)
 
-    initial_points = box_limits[:, 0] + uniforms * (box_limits[:, 1] - box_limits[:, 0])
+        uniforms = rng.uniform(size=(n_live_points, n_params))
 
-    # for non truth seed, convert from cos zenith to zenith
-    if not truth_seed:
-        initial_points[:, 5] = np.arccos(initial_points[:, 5])
+        initial_points = box_limits[:, 0] + uniforms * (
+            box_limits[:, 1] - box_limits[:, 0]
+        )
 
-    # energy parameters need to be converted from log energy to energy
-    initial_points[:, 6:] = 10 ** initial_points[:, 6:]
+        # for non truth seed, convert from cos zenith to zenith
+        if not truth_seed:
+            initial_points[:, 5] = np.arccos(initial_points[:, 5])
 
-    if truth_seed:
-        initial_points[-1] = event["params"]
+        # energy parameters need to be converted from log energy to energy
+        initial_points[:, 6:] = 10 ** initial_points[:, 6:]
 
-    if inv_trans is not None:
-        initial_points = inv_trans(initial_points)
+        if truth_seed:
+            initial_points[-1] = event["params"]
+
+        if inv_trans is not None:
+            initial_points = inv_trans(initial_points)
 
     opt_ret = spherical_opt.spherical_opt(
         func=eval_llh,
@@ -144,15 +200,17 @@ def fit_events(
     events,
     index,
     ctrl_addrs,
-    init_range,
-    search_limits,
-    n_live_points,
+    init_range=DEFAULT_INIT_RANGE,
+    search_limits=DEFAULT_SEARCH_LIMITS,
+    n_live_points=None,
     random_seed=None,
     conf_timeout=60000,
     do_postfit=False,
     store_all=False,
     truth_seed=False,
     transforms=None,
+    fixed_params=None,
+    initial_points=None,
     **sph_opt_kwargs,
 ):
     rng = np.random.default_rng(random_seed)
@@ -177,6 +235,8 @@ def fit_events(
             store_all=store_all,
             truth_seed=truth_seed,
             transforms=transforms,
+            fixed_params=fixed_params,
+            initial_points=initial_points,
             **sph_opt_kwargs,
         )
         delta = time.time() - start
@@ -206,14 +266,16 @@ def fit_events(
 def fit_event(
     event,
     ctrl_addr,
-    init_range,
-    search_limits,
-    n_live_points,
+    init_range=DEFAULT_INIT_RANGE,
+    search_limits=DEFAULT_SEARCH_LIMITS,
+    n_live_points=None,
     conf_timeout=60000,
     do_postfit=False,
     store_all=False,
     truth_seed=False,
     transforms=None,
+    fixed_params=None,
+    initial_points=None,
     **sph_opt_kwargs,
 ):
     """wrapper around fit_events to fit a single event"""
@@ -229,6 +291,8 @@ def fit_event(
         store_all=store_all,
         truth_seed=truth_seed,
         transforms=transforms,
+        fixed_params=fixed_params,
+        initial_points=initial_points,
         **sph_opt_kwargs,
     )[0]
 
