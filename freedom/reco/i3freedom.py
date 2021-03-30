@@ -1,36 +1,16 @@
 """Provides I3Module(s) for FreeDOM reco"""
 
-from freedom.reco.crs_reco import batch_crs_fit
+from freedom.reco.crs_reco import (
+    batch_crs_fit,
+    DEFAULT_SEARCH_LIMITS,
+    DEFAULT_INIT_RANGE,
+)
 from freedom.utils import i3frame_dataloader
 from freedom.llh_service.llh_client import LLHClient
 import numpy as np
 import math
 import time
 
-DEFAULT_SEARCH_LIMITS = np.array(
-    [
-        [-500, 500],
-        [-500, 500],
-        [-1000, 700],
-        [800, 20000],
-        [0, 2 * math.pi],
-        [0, math.pi],
-        [0.1, 1000],
-        [0, 1000],
-    ]
-).T
-DEFAULT_INIT_RANGE = np.array(
-    [
-        [-50.0, 50.0],
-        [-50.0, 50.0],
-        [-100.0, 100.0],
-        [-1000.0, 0.0],
-        [0.0, 2 * math.pi],
-        [-1, 1],
-        [0.0, 1.7],
-        [0.0, 1.7],
-    ]
-)
 DEFAULT_N_LIVE_POINTS = 97
 DEFAULT_BATCH_SIZE = 12
 DEFAULT_MAX_ITER = 10000
