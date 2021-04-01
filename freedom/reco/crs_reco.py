@@ -118,7 +118,7 @@ def batch_crs_fit(
     do_postfit=False,
     store_all=False,
     truth_seed=False,
-    transforms=None,
+    param_transforms=None,
     fixed_params=None,
     initial_points=None,
     **sph_opt_kwargs,
@@ -126,12 +126,12 @@ def batch_crs_fit(
 
     out_of_bounds = bounds.get_out_of_bounds_func(search_limits, bounds_check_type)
 
-    if transforms is None:
+    if param_transforms is None:
         trans = None
         inv_trans = None
     else:
-        trans = transforms["trans"]
-        inv_trans = transforms["inv_trans"]
+        trans = param_transforms["trans"]
+        inv_trans = param_transforms["inv_trans"]
 
     eval_llh = get_batch_closure(clients, event, out_of_bounds, trans, fixed_params)
 
@@ -191,7 +191,10 @@ def batch_crs_fit(
         opt_ret["all_pts"] = eval_llh.evaluated_pts
 
     if do_postfit:
-        opt_ret["postfit"] = postfit.postfit(eval_llh.evaluated_pts)
+        opt_ret["postfit"] = postfit.postfit(
+            eval_llh.evaluated_pts,
+            par_names=transforms.get_free_par_names(param_transforms, fixed_params),
+        )
 
     return opt_ret
 
@@ -208,7 +211,7 @@ def fit_events(
     do_postfit=False,
     store_all=False,
     truth_seed=False,
-    transforms=None,
+    param_transforms=None,
     fixed_params=None,
     initial_points=None,
     **sph_opt_kwargs,
@@ -234,7 +237,7 @@ def fit_events(
             do_postfit=do_postfit,
             store_all=store_all,
             truth_seed=truth_seed,
-            transforms=transforms,
+            param_transforms=param_transforms,
             fixed_params=fixed_params,
             initial_points=initial_points,
             **sph_opt_kwargs,
@@ -273,7 +276,7 @@ def fit_event(
     do_postfit=False,
     store_all=False,
     truth_seed=False,
-    transforms=None,
+    param_transforms=None,
     fixed_params=None,
     initial_points=None,
     **sph_opt_kwargs,
@@ -290,7 +293,7 @@ def fit_event(
         do_postfit=do_postfit,
         store_all=store_all,
         truth_seed=truth_seed,
-        transforms=transforms,
+        param_transforms=param_transforms,
         fixed_params=fixed_params,
         initial_points=initial_points,
         **sph_opt_kwargs,

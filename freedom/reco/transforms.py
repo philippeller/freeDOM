@@ -81,7 +81,9 @@ def insert_fixed_params(params, fixed_params):
     """
     params = np.atleast_2d(params)
 
-    full_params = np.empty((params.shape[0], len(DEFAULT_LABELS)), dtype=params.dtype)
+    full_params = np.empty(
+        (params.shape[0], params.shape[1] + len(fixed_params)), dtype=params.dtype
+    )
 
     fix_inds = []
     for ind, val in fixed_params:
@@ -93,3 +95,16 @@ def insert_fixed_params(params, fixed_params):
         full_params[:, free_ind] = param
 
     return full_params
+
+
+def get_free_par_names(transforms, fixed_params):
+    """helper function to get names of free parameters
+
+    Useful in the presence of parameter transformations and fixed params"""
+
+    par_names = DEFAULT_LABELS if transforms is None else transforms["par_names"]
+    if fixed_params is None:
+        return par_names
+
+    fix_inds, _ = zip(*fixed_params)
+    return [name for i, name in enumerate(par_names) if i not in fix_inds]

@@ -8,7 +8,6 @@ from freedom.reco.crs_reco import (
 from freedom.utils import i3frame_dataloader
 from freedom.llh_service.llh_client import LLHClient
 import numpy as np
-import math
 import time
 
 DEFAULT_N_LIVE_POINTS = 97
