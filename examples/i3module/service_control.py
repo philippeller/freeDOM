@@ -1,11 +1,12 @@
 """Start or stop a service to use with the client module"""
 
+import pkg_resources
 import sys
 from argparse import ArgumentParser
 
 import zmq
 
-from freedom.reco.crs_reco import start_service, adjust_addr_string
+from freedom.reco.crs_reco import start_service
 from freedom.reco.i3freedom import DEFAULT_SEARCH_LIMITS
 
 ctrl_addr = "tcp://127.0.0.1:*"
@@ -50,6 +51,8 @@ def build_service_conf(hitnet, chargenet, theta_prior, t_prior):
 
 
 def main():
+    resource_dir = pkg_resources.resource_filename("freedom", "resources")
+
     parser = ArgumentParser()
     parser.add_argument(
         "--hitnet",
@@ -66,15 +69,13 @@ def main():
     parser.add_argument(
         "--theta_prior",
         type=str,
-        #default="/home/atfienberg/IceCube/freeDOM/freedom/resources/prior/oscNext_theta_prior_norm.hdf5",
-        default="/home/iwsatlas1/peller/freeDOM/freedom/resources/prior/oscNext_theta_prior_norm.hdf5",
+        default=f"{resource_dir}/prior/oscNext_theta_prior_norm.hdf5",
         help="""theta prior file path""",
     )
     parser.add_argument(
         "--t_prior",
         type=str,
-        #default="/home/atfienberg/IceCube/freeDOM/freedom/resources/prior/oscNext_time_residual_prior.pkl",
-        default="/home/iwsatlas1/peller/freeDOM/freedom/resources/prior/oscNext_time_residual_prior.pkl",
+        default=f"{resource_dir}/prior/oscNext_time_residual_prior.pkl",
         help="""time prior file path""",
     )
     parser.add_argument(
