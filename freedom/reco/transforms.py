@@ -13,7 +13,7 @@ from freedom.utils.i3frame_dataloader import DEFAULT_LABELS
 DEFAULT_CASC_E_IND = DEFAULT_LABELS.index("cascade_energy")
 DEFAULT_TRACK_E_IND = DEFAULT_LABELS.index("track_energy")
 
-TRACK_FRAC_NAMES = DEFAULT_LABELS
+TRACK_FRAC_NAMES = DEFAULT_LABELS.copy()
 TRACK_FRAC_NAMES[DEFAULT_CASC_E_IND] = "total_energy"
 TRACK_FRAC_NAMES[DEFAULT_TRACK_E_IND] = "track_frac"
 
