@@ -6,8 +6,7 @@ from argparse import ArgumentParser
 
 import zmq
 
-from freedom.reco.crs_reco import start_service
-from freedom.reco.i3freedom import DEFAULT_SEARCH_LIMITS
+from freedom.reco.crs_reco import start_service, DEFAULT_SEARCH_LIMITS
 
 ctrl_addr = "tcp://127.0.0.1:*"
 req_addr = "tcp://127.0.0.1:*"

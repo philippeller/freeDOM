@@ -57,6 +57,18 @@ DEFAULT_SEARCH_LIMITS = np.array(
     ]
 ).T
 
+ZERO_TRACK_SEED_RANGE = 3
+"""Range (in n estimated sigma) to smear best fit parameters before the zero track fit"""
+
+TRACK_PAR_NAMES = ("track_energy", "track_frac")
+"""known track energy related parameter names"""
+
+CASC_PAR_NAMES = ("cascade_energy", "total_energy")
+"""known total/cascade energy related parameter names"""
+
+LOG_E_SEARCH_RANGE = (0, 2)
+""" range of log energies over which to populate initial points in the zero track, energy only fit"""
+
 
 def get_batch_closure(
     clients, event, out_of_bounds, param_transform=None, fixed_params=None
@@ -79,15 +91,7 @@ def get_batch_closure(
     evt_data = event["evt_data"]
 
     def eval_llh(params):
-        if fixed_params is not None:
-            full_params = transforms.insert_fixed_params(params, fixed_params)
-        else:
-            full_params = params
-
-        if param_transform is not None:
-            trans_params = param_transform(full_params)
-        else:
-            trans_params = full_params
+        trans_params = transforms.apply_transform(param_transform, params, fixed_params)
 
         llhs = 0
         for i in range(len(clients)):
@@ -123,6 +127,37 @@ def batch_crs_fit(
     initial_points=None,
     **sph_opt_kwargs,
 ):
+    """fit an event with the CRS2 optimizer
+    
+    Parameters
+    ----------
+    event : dict
+        the event data
+    clients : list
+        list of LLHClients, one per DOM type
+    rng : np.random.Generator           
+    init_range : np.ndarray
+    search_limits : np.ndarray
+    n_live_poins : int, default None
+        must be specified if initial_points is not
+    bounds_check_type : str, default "cube"
+    do_postfit : bool
+    store_all : bool
+        whether to include all sampled LLH points in the return dct
+    truth_seed : bool
+    param_transforms : dict, default None
+    fixed_params : list, default None
+        list of form [(par_index, fix_value)]
+    initial_points : np.ndarray, default None
+        supersedes init_range, truth_seed, n_live_points
+    **sph_opt_kwargs
+        kwargs that will be passed to spherical_opt.spherical_opt()
+
+    Returns
+    -------
+    dict
+        fit result
+    """
 
     out_of_bounds = bounds.get_out_of_bounds_func(search_limits, bounds_check_type)
 
@@ -193,7 +228,7 @@ def batch_crs_fit(
     if do_postfit:
         opt_ret["postfit"] = postfit.postfit(
             eval_llh.evaluated_pts,
-            par_names=transforms.get_free_par_names(param_transforms, fixed_params),
+            par_names=transforms.free_par_names(param_transforms, fixed_params),
         )
 
     return opt_ret
@@ -216,6 +251,10 @@ def fit_events(
     initial_points=None,
     **sph_opt_kwargs,
 ):
+    """fit a list of events
+    
+    see batch_opt_ret for param descriptions"""
+
     rng = np.random.default_rng(random_seed)
 
     outputs = []
@@ -226,8 +265,7 @@ def fit_events(
     #    clients.append(LLHClient(ctrl_addr=ctrl_addrs[i], conf_timeout=conf_timeout))
 
     for event in events:
-        start = time.time()
-        fit_res = batch_crs_fit(
+        fit_res = timed_fit(
             event,
             clients,
             rng,
@@ -242,7 +280,7 @@ def fit_events(
             initial_points=initial_points,
             **sph_opt_kwargs,
         )
-        delta = time.time() - start
+        delta = fit_res["delta"]
 
         try:
             true_param_llh = 0
@@ -298,6 +336,91 @@ def fit_event(
         initial_points=initial_points,
         **sph_opt_kwargs,
     )[0]
+
+
+def timed_fit(*fit_args, **fit_kwargs):
+    """wrapper around batch_crs_fit that records the fit's wall clock duration"""
+    start = time.time()
+    fit_res = batch_crs_fit(*fit_args, **fit_kwargs)
+    fit_res["delta"] = time.time() - start
+
+    return fit_res
+
+
+def zero_track_fit(full_res, *fit_args, **fit_kwargs):
+    """conduct no-track fits based on the result of a full fit
+    
+    Parameters
+    ----------
+    full_res : dict
+        full crs fit result; must include postfit
+    *fit_args 
+        positional args for batch_crs_fit
+    **fit_kwargs 
+        arbitrary kwargs for batch_crs_fit
+
+    Returns
+    -------
+    tuple
+        (no track fit result, no track energy only fit result)
+    """
+    par_transforms = fit_kwargs.get("param_transforms", None)
+    rng = fit_kwargs.get("rng", None)
+    n_live_points = fit_kwargs["n_live_points"]
+    batch_size = fit_kwargs["batch_size"]
+
+    par_names = transforms.free_par_names(par_transforms, None)
+
+    # zero track fit with all other params free
+    fixed_pars = [
+        (i, 0.0) for i, name in enumerate(par_names) if name in TRACK_PAR_NAMES
+    ]
+    if len(fixed_pars) != 1:
+        raise ValueError(
+            f"Expected exactly one track-E like par name, found {len(fixed_pars)}"
+        )
+    fix_ind = fixed_pars[0][0]
+    # this routine will break if track par index is < the spherical indices
+    # for now, let's just check that isn't the case
+    all_sph_inds = sum(fit_kwargs.get("spherical_indices", [[]]), [])
+    if any(fix_ind < sph_ind for sph_ind in all_sph_inds):
+        raise ValueError(
+            "zero_track_fit requires spherical par indices to be < energy par indices"
+        )
+
+    best_fit = full_res["x"]
+    seed_pars = np.array([x for i, x in enumerate(best_fit) if i != fix_ind])
+
+    stds = full_res["postfit"]["stds"]
+    seed_stds = np.array([std for i, std in enumerate(stds) if i != fix_ind])
+
+    initial_points = prefit.seed_box(
+        seed_pars, ZERO_TRACK_SEED_RANGE * seed_stds, n_live_points, rng
+    )
+
+    fit_kwargs.update(dict(fixed_params=fixed_pars, initial_points=initial_points))
+
+    no_track_res = timed_fit(*fit_args, **fit_kwargs)
+    no_track_res["fixed_params"] = fixed_pars.copy()
+
+    # zero track fit with only total / cascade energy free
+    for i, name in enumerate(par_names):
+        if name not in CASC_PAR_NAMES and name not in TRACK_PAR_NAMES:
+            fixed_pars.append((i, best_fit[i]))
+
+    n_points = batch_size + 1
+    initial_points = np.logspace(*LOG_E_SEARCH_RANGE, n_points)[:, np.newaxis]
+
+    fit_kwargs.update(
+        dict(
+            fixed_params=fixed_pars, initial_points=initial_points, spherical_indices=()
+        )
+    )
+
+    E_only_res = timed_fit(*fit_args, **fit_kwargs)
+    E_only_res["fixed_params"] = fixed_pars
+
+    return no_track_res, E_only_res
 
 
 def start_service(params, ctrl_addr, req_addr, cuda_device):

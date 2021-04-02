@@ -1,14 +1,15 @@
 """Provides I3Module(s) for FreeDOM reco"""
 
 from freedom.reco.crs_reco import (
-    batch_crs_fit,
+    timed_fit,
+    zero_track_fit,
     DEFAULT_SEARCH_LIMITS,
     DEFAULT_INIT_RANGE,
 )
+from freedom.reco import transforms
 from freedom.utils import i3frame_dataloader
 from freedom.llh_service.llh_client import LLHClient
 import numpy as np
-import time
 
 DEFAULT_N_LIVE_POINTS = 97
 DEFAULT_BATCH_SIZE = 12
@@ -44,14 +45,15 @@ class I3FreeDOMClient:
         store_all=False,
         truth_seed=False,
         batch_size=DEFAULT_BATCH_SIZE,
+        par_transforms=None,
+        do_track_dllh=False,
+        **crs_fit_kwargs,
     ):
         """reconstruct an event stored in an i3frame"""
-        start = time.time()
-
         event = i3frame_dataloader.load_event(frame, geo, reco_pulse_series_name)
 
-        fit_res = batch_crs_fit(
-            event,
+        fit_kwargs = dict(
+            event=event,
             clients=[self._llh_client],
             rng=self._rng,
             init_range=init_range,
@@ -60,30 +62,46 @@ class I3FreeDOMClient:
             do_postfit=do_postfit,
             store_all=store_all,
             truth_seed=truth_seed,
-            batch_size=DEFAULT_BATCH_SIZE,
+            param_transforms=par_transforms,
+            batch_size=batch_size,
             spherical_indices=DEFAULT_SPHERICAL_INDICES,
             max_iter=DEFAULT_MAX_ITER,
+            **crs_fit_kwargs,
         )
 
+        full_res = timed_fit(**fit_kwargs)
+
         if event["params"] is not None:
-            fit_res["truth_LLH"] = self._llh_client.eval_llh(
+            full_res["truth_LLH"] = self._llh_client.eval_llh(
                 event["hit_data"][0], event["evt_data"][0], event["params"]
             )
 
-        delta = time.time() - start
-        fit_res["delta"] = delta
+        prefix = f"FreeDOM_{suffix}_"
 
-        store_reco_output(frame, suffix, fit_res)
+        store_fit_result(
+            frame, prefix, full_res, par_transforms, store_i3_particles=True
+        )
+
+        if do_track_dllh:
+            # do not conduct postfit for zero_track fits
+            fit_kwargs["do_postfit"] = False
+            no_track_res, E_only_res = zero_track_fit(full_res, **fit_kwargs)
+
+            store_dllh(frame, prefix, full_res, no_track_res, E_only_res)
+            store_fit_result(frame, prefix + "no_track_", no_track_res, par_transforms)
+            store_fit_result(frame, prefix + "E_only_", E_only_res, par_transforms)
 
 
-def store_reco_output(frame, suffix, fit_res):
+def store_fit_result(
+    frame, prefix, fit_res, par_transforms=None, store_i3_particles=False,
+):
     """store reco output in an i3frame"""
     from icecube.dataclasses import I3VectorString, I3VectorDouble, I3Double
     from icecube.icetray import I3Int, I3Bool
 
-    prefix = f"FreeDOM_{suffix}_"
+    fixed_params = fit_res.get("fixed_params", None)
 
-    par_names = i3frame_dataloader.DEFAULT_LABELS
+    par_names = transforms.free_par_names(par_transforms, fixed_params)
     frame[f"{prefix}par_names"] = to_i3_vec(par_names, I3VectorString)
 
     frame[f"{prefix}best_fit"] = to_i3_vec(fit_res["x"], I3VectorDouble)
@@ -113,10 +131,31 @@ def store_reco_output(frame, suffix, fit_res):
         else:
             frame[f"{prefix}{key}"] = to_i3_vec(val, I3VectorDouble)
 
-    reco_pars = {name: val for name, val in zip(par_names, fit_res["x"])}
-    reco_pars["success"] = fit_res["success"]
-    for particle_type in ("neutrino", "cascade", "track"):
-        frame[f"{prefix}{particle_type}"] = build_i3_particle(reco_pars, particle_type)
+    if store_i3_particles:
+        trans = par_transforms["trans"] if par_transforms is not None else None
+        best_fit_pars = transforms.apply_transform(trans, fit_res["x"], fixed_params)
+
+        reco_pars = {
+            name: val
+            for name, val in zip(i3frame_dataloader.DEFAULT_LABELS, best_fit_pars)
+        }
+        reco_pars["success"] = fit_res["success"]
+        for particle_type in ("neutrino", "cascade", "track"):
+            frame[f"{prefix}{particle_type}"] = build_i3_particle(
+                reco_pars, particle_type
+            )
+
+
+def store_dllh(frame, prefix, full_res, no_track_res, E_only_res):
+    """store no-track delta LLH info in an i3frame"""
+    from icecube.dataclasses import I3Double
+
+    frame[f"{prefix}notrack_dllh"] = I3Double(
+        float(no_track_res["fun"] - full_res["fun"])
+    )
+    frame[f"{prefix}notrack_e_only_dllh"] = I3Double(
+        float(E_only_res["fun"] - full_res["fun"])
+    )
 
 
 def to_i3_vec(array, i3_vec_type):
