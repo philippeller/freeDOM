@@ -153,7 +153,7 @@ def store_dllh(frame, prefix, full_res, no_track_res, E_only_res):
     frame[f"{prefix}notrack_dllh"] = I3Double(
         float(no_track_res["fun"] - full_res["fun"])
     )
-    frame[f"{prefix}notrack_e_only_dllh"] = I3Double(
+    frame[f"{prefix}notrack_E_only_dllh"] = I3Double(
         float(E_only_res["fun"] - full_res["fun"])
     )
 
