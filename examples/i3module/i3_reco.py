@@ -13,7 +13,7 @@ from I3Tray import I3Tray
 import numpy as np
 import zmq
 
-from freedom.reco import i3freedom
+from freedom.reco import i3freedom, transforms
 
 CONF_TIMEOUT_MS = 10000
 
@@ -72,6 +72,8 @@ def main():
         freedom_reco,
         geo=geo,
         reco_pulse_series_name="SRTTWOfflinePulsesDC",
+        par_transforms=transforms.track_frac_transforms,
+        do_track_dllh=True,
         suffix="test",
     )
     tray.AddModule(evt_counter)

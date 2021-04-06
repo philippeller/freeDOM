@@ -75,3 +75,34 @@ def truth_seed_box(true_params, init_range, az_ind=4, zen_ind=5):
     limits[zen_ind] = limits[zen_ind].clip(0, np.pi)
 
     return limits
+
+
+def seed_box(seed_params, par_ranges, n_pts, rng=None):
+    """take a seed point and generate points in a cube around it
+
+    Parameters
+    ----------
+    seed_params : np.ndarray
+    par_ranges : np.ndarray
+    n_pts: int
+    rng: np.random.Generator, default None
+
+    Returns
+    -------
+    np.ndarray
+        shape is (n_pts, n_params)
+    """
+
+    if rng is None:
+        rng = np.random.default_rng()
+
+    output = np.empty((n_pts, len(seed_params)), dtype=seed_params.dtype)
+
+    shifts = (
+        par_ranges * rng.uniform(size=(n_pts - 1, len(seed_params))) - par_ranges / 2
+    )
+
+    output[:-1] = shifts + seed_params
+    output[-1] = seed_params
+
+    return output
