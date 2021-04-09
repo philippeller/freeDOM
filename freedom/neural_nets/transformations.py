@@ -203,8 +203,12 @@ class hitnet_trafo(tf.keras.layers.Layer):
             out = [tres, dist, costhetadir, absdeltaphidir, dir_x, dir_y, dir_z, dx, dy, dz, delta, 
                    hit[:,0], hit[:,1], hit[:,2], hit[:,5], cos_pmtd, cos_dird, track_fraction] #, cascade_energy, track_energy
         else:
+            cascade_energy = tf.math.log(tf.clip_by_value(params[:, self.cascade_energy_idx], self.min_energy, self.max_energy))
+            track_energy = tf.math.log(tf.clip_by_value(params[:, self.track_energy_idx], self.min_energy, self.max_energy))
+            
             out = [delta, dist, costhetadir, absdeltaphidir, dir_x, dir_y, dir_z, dx, dy, dz, hit[:,0], hit[:,1], hit[:,2],
                    hit[:,5], hit[:,6], cascade_energy, track_energy]
+        
         out = tf.stack(out, axis=1)
 
         return out
@@ -545,6 +549,9 @@ class chargenet_trafo(tf.keras.layers.Layer):
                     axis=1
                     )
         elif charge.shape[1] == 6:
+            cascade_energy = tf.math.log(tf.clip_by_value(params[:, self.cascade_energy_idx], self.min_energy, self.max_energy))
+            track_energy = tf.math.log(tf.clip_by_value(params[:, self.track_energy_idx], self.min_energy, self.max_energy))
+        
             out = tf.stack([
                      charge[:,0],
                      charge[:,1], #n_channels
