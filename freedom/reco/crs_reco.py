@@ -70,6 +70,7 @@ LOG_E_SEARCH_RANGE = (0, 2)
 """ range of log energies over which to populate initial points in the zero track, energy only fit"""
 
 
+
 def get_batch_closure(
     clients, event, out_of_bounds, param_transform=None, fixed_params=None
 ):
@@ -86,7 +87,6 @@ def get_batch_closure(
     fixed_params : list of tuples
         tuples are of form (par_index, val_to_fix)
     """
-
     hit_data = event["hit_data"]
     evt_data = event["evt_data"]
 
@@ -122,6 +122,7 @@ def batch_crs_fit(
     do_postfit=False,
     store_all=False,
     truth_seed=False,
+    seed=None,
     param_transforms=None,
     fixed_params=None,
     initial_points=None,
@@ -145,6 +146,7 @@ def batch_crs_fit(
     store_all : bool
         whether to include all sampled LLH points in the return dct
     truth_seed : bool
+    seed: np.ndarray, default None
     param_transforms : dict, default None
     fixed_params : list, default None
         list of form [(par_index, fix_value)]
@@ -192,6 +194,8 @@ def batch_crs_fit(
 
         if truth_seed:
             box_limits = prefit.truth_seed_box(event["params"], init_range)
+        elif np.all(seed) != None:
+            box_limits = prefit.truth_seed_box(seed, init_range)
         else:
             box_limits = prefit.initial_box(all_hits, init_range, n_params=n_params)
 
@@ -202,14 +206,16 @@ def batch_crs_fit(
         )
 
         # for non truth seed, convert from cos zenith to zenith
-        if not truth_seed:
+        if not truth_seed and np.all(seed) == None:
             initial_points[:, 5] = np.arccos(initial_points[:, 5])
-
+        
         # energy parameters need to be converted from log energy to energy
         initial_points[:, 6:] = 10 ** initial_points[:, 6:]
 
         if truth_seed:
             initial_points[-1] = event["params"]
+        elif np.all(seed) != None:
+            initial_points[-1] = seed
 
         if inv_trans is not None:
             initial_points = inv_trans(initial_points)
@@ -246,6 +252,7 @@ def fit_events(
     do_postfit=False,
     store_all=False,
     truth_seed=False,
+    seeds=None,
     param_transforms=None,
     fixed_params=None,
     initial_points=None,
@@ -263,8 +270,11 @@ def fit_events(
     # clients = [] # use this for ICU reco
     # for i in range(3):
     #    clients.append(LLHClient(ctrl_addr=ctrl_addrs[i], conf_timeout=conf_timeout))
+    
+    if np.all(seeds) == None:
+        seeds = [None] * len(events)
 
-    for event in events:
+    for j, event in enumerate(events):
         fit_res = timed_fit(
             event,
             clients,
@@ -275,6 +285,7 @@ def fit_events(
             do_postfit=do_postfit,
             store_all=store_all,
             truth_seed=truth_seed,
+            seed=seeds[j],
             param_transforms=param_transforms,
             fixed_params=fixed_params,
             initial_points=initial_points,

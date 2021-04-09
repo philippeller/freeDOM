@@ -47,6 +47,9 @@ def main():
     parser.add_argument(
         "--n_frames", type=int, default=None, help="""number of frames to process"""
     )
+    parser.add_argument(
+        "--gcd_file", type=str, default=None, help="""GCD file""",
+    )
 
     args = parser.parse_args()
 
@@ -57,9 +60,14 @@ def main():
     except zmq.error.Again:
         print("Could not connect to the LLH Service!")
         sys.exit(0)
-
+    
+    if args.gcd_file == None:
+        files = args.input_files
+    else:
+        files = [args.gcd_file, args.input_files[0]]
+    
     tray = I3Tray()
-    tray.AddModule("I3Reader", FilenameList=args.input_files)
+    tray.AddModule("I3Reader", FilenameList=files)
     tray.AddModule(
         freedom_reco,
         geo=geo,
