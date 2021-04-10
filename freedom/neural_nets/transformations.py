@@ -187,22 +187,28 @@ class hitnet_trafo(tf.keras.layers.Layer):
         delta = dt * self.speed_of_light - dist
         tres = self.TimeResidual(hit, params)
 
-        cascade_energy = tf.math.log(tf.clip_by_value(params[:, self.cascade_energy_idx], self.min_energy, self.max_energy))
-        track_energy = tf.math.log(tf.clip_by_value(params[:, self.track_energy_idx], self.min_energy, self.max_energy))
+        #cascade_energy = tf.math.log(tf.clip_by_value(params[:, self.cascade_energy_idx], self.min_energy, self.max_energy))
+        #track_energy = tf.math.log(tf.clip_by_value(params[:, self.track_energy_idx], self.min_energy, self.max_energy))
+        energy = params[:, self.cascade_energy_idx] + params[:, self.track_energy_idx]
+        track_fraction = params[:, self.track_energy_idx] / energy
         
         if self.use_pmt_dir:
             pmt_x = tf.math.sin(hit[:,7]) * tf.math.cos(hit[:,8])
             pmt_y = tf.math.sin(hit[:,7]) * tf.math.sin(hit[:,8])
             pmt_z = tf.math.cos(hit[:,7])
             
-            cos_pmtd = (pmt_x*dx + pmt_y*dy + pmt_z*dz)/(dist) # pmt looks to event?
-            cos_dird = (dir_x*dx + dir_y*dy + dir_z*dz)/(dist) # event flies to pmt?
+            cos_pmtd = tf.clip_by_value((pmt_x*dx + pmt_y*dy + pmt_z*dz)/(dist), -1, 1) # pmt looks to event?
+            cos_dird = tf.clip_by_value((dir_x*dx + dir_y*dy + dir_z*dz)/(dist), -1, 1) # event flies to pmt?
             
             out = [tres, dist, costhetadir, absdeltaphidir, dir_x, dir_y, dir_z, dx, dy, dz, delta, 
-                   hit[:,0], hit[:,1], hit[:,2], hit[:,5], hit[:,6], cos_pmtd, cos_dird] #, cascade_energy, track_energy
+                   hit[:,0], hit[:,1], hit[:,2], hit[:,5], cos_pmtd, cos_dird, track_fraction] #, cascade_energy, track_energy
         else:
+            cascade_energy = tf.math.log(tf.clip_by_value(params[:, self.cascade_energy_idx], self.min_energy, self.max_energy))
+            track_energy = tf.math.log(tf.clip_by_value(params[:, self.track_energy_idx], self.min_energy, self.max_energy))
+            
             out = [delta, dist, costhetadir, absdeltaphidir, dir_x, dir_y, dir_z, dx, dy, dz, hit[:,0], hit[:,1], hit[:,2],
                    hit[:,5], hit[:,6], cascade_energy, track_energy]
+        
         out = tf.stack(out, axis=1)
 
         return out
@@ -502,9 +508,14 @@ class chargenet_trafo(tf.keras.layers.Layer):
         dir_z = tf.math.cos(params[:, self.zenith_idx])
         
 
-        cascade_energy = tf.math.log(tf.clip_by_value(params[:, self.cascade_energy_idx], self.min_energy, self.max_energy))
-        track_energy = tf.math.log(tf.clip_by_value(params[:, self.track_energy_idx], self.min_energy, self.max_energy))
-        
+        #cascade_energy = tf.math.log(tf.clip_by_value(params[:, self.cascade_energy_idx], self.min_energy, self.max_energy))
+        #track_energy = tf.math.log(tf.clip_by_value(params[:, self.track_energy_idx], self.min_energy, self.max_energy))
+        energy = params[:, self.cascade_energy_idx] + params[:, self.track_energy_idx]
+        energy_ratio = params[:, self.track_energy_idx] / params[:, self.cascade_energy_idx]
+        track_fraction = params[:, self.track_energy_idx] / energy 
+        energy = tf.math.log(tf.clip_by_value(energy, self.min_energy, self.max_energy))
+        energy_ratio = tf.clip_by_value(tf.math.log(energy_ratio), -8.7, 8.7)
+        '''
         if charge.shape[1] == 2:
             out = tf.stack([
                      charge[:,0]/2.0e4,
@@ -520,7 +531,27 @@ class chargenet_trafo(tf.keras.layers.Layer):
                     ],
                     axis=1
                     )
+        '''
+        if charge.shape[1] == 2:
+            out = tf.stack([
+                     charge[:,0]/2.0e4,
+                     charge[:,1]/5.41e2, #n_channels
+                     (params[:, self.x_idx]+750)/1.576e3,
+                     (params[:, self.y_idx]+805)/1.577e3,
+                     (params[:, self.z_idx]+1115)/1.538e3,
+                     (dir_x+1)/2.,
+                     (dir_y+1)/2.,
+                     (dir_z+1)/2.,
+                     (energy+1.37)/10.6,
+                     (energy_ratio+8.7)/17.4,
+                     track_fraction,
+                    ],
+                    axis=1
+                    )
         elif charge.shape[1] == 6:
+            cascade_energy = tf.math.log(tf.clip_by_value(params[:, self.cascade_energy_idx], self.min_energy, self.max_energy))
+            track_energy = tf.math.log(tf.clip_by_value(params[:, self.track_energy_idx], self.min_energy, self.max_energy))
+        
             out = tf.stack([
                      charge[:,0],
                      charge[:,1], #n_channels
@@ -540,6 +571,40 @@ class chargenet_trafo(tf.keras.layers.Layer):
                     axis=1
                     )
 
+        return out
+    
+class prior_trafo(tf.keras.layers.Layer):
+    def __init__(self, **kwargs):        
+        super().__init__()
+
+    def call(self, params):
+        PI = tf.constant(constants.pi)
+        dir_x = (tf.math.sin(params[:, 5]*PI) * tf.math.cos(params[:, 4]*2*PI) + 1.) / 2.
+        dir_y = (tf.math.sin(params[:, 5]*PI) * tf.math.sin(params[:, 4]*2*PI) + 1.) / 2.
+        dir_z = (tf.math.cos(params[:, 5]*PI) + 1.) / 2.
+
+        #cascade_energy = tf.math.log(tf.clip_by_value(1e3*params[:, 6], 0.1, 1.05e3))
+        #cascade_energy = (cascade_energy - tf.math.log(0.1)) / (tf.math.log(1e3)-tf.math.log(0.1))
+        #track_energy = tf.math.log(tf.clip_by_value(1e3*params[:, 7], 0.1, 1.05e3))
+        #track_energy = (track_energy - tf.math.log(0.1)) / (tf.math.log(1e3)-tf.math.log(0.1))
+        total_e = tf.math.log(tf.clip_by_value(1e3*(params[:, 6]+params[:, 7]), 0.1, 2e3))#
+        track_frac = params[:, 7] / (params[:, 6]+params[:, 7])
+        total_e = (total_e - tf.math.log(0.1)) / (tf.math.log(2e3)-tf.math.log(0.1))
+        
+        out = tf.stack([
+                 params[:,0],
+                 params[:,1],
+                 params[:,2],
+                 params[:,3],
+                 dir_x,
+                 dir_y,
+                 dir_z,
+                 total_e,
+                 track_frac,
+                ],
+                axis=1
+                )    
+            
         return out
 
 
