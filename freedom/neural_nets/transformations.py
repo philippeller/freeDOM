@@ -200,8 +200,8 @@ class hitnet_trafo(tf.keras.layers.Layer):
             cos_pmtd = tf.clip_by_value((pmt_x*dx + pmt_y*dy + pmt_z*dz)/(dist), -1, 1) # pmt looks to event?
             cos_dird = tf.clip_by_value((dir_x*dx + dir_y*dy + dir_z*dz)/(dist), -1, 1) # event flies to pmt?
             
-            out = [tres, dist, costhetadir, absdeltaphidir, dir_x, dir_y, dir_z, dx, dy, dz, delta, 
-                   hit[:,0], hit[:,1], hit[:,2], hit[:,5], cos_pmtd, cos_dird, track_fraction] #, cascade_energy, track_energy
+            out = [tres, dist, costhetadir, absdeltaphidir, dir_x, dir_y, dir_z, dx, dy, dz, delta, #dt,
+                   hit[:,0], hit[:,1], hit[:,2], hit[:,3], hit[:,5], cos_pmtd, cos_dird, track_fraction]
         else:
             cascade_energy = tf.math.log(tf.clip_by_value(params[:, self.cascade_energy_idx], self.min_energy, self.max_energy))
             track_energy = tf.math.log(tf.clip_by_value(params[:, self.track_energy_idx], self.min_energy, self.max_energy))
