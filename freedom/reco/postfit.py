@@ -140,9 +140,11 @@ def hull_area(par, llhs, above_min=1):
     float
     """
     min_llh = llhs.min()
-    Hull = ConvexHull(np.stack([par, llhs]).T[llhs < min_llh+above_min])
-    
-    return Hull.volume
+    try:
+        Hull = ConvexHull(np.stack([par, llhs]).T[llhs < min_llh+above_min])
+        return Hull.volume
+    except:
+        return None
 
 
 def furthest_point(par, llhs, above_min=2):
@@ -162,7 +164,7 @@ def furthest_point(par, llhs, above_min=2):
     min_llh = llhs.min()
     min_par = par[np.argmin(llhs)]
     
-    return np.max(np.abs(min_par - par[llhs<min_llh+2]))
+    return np.max(np.abs(min_par - par[llhs<min_llh+above_min]))
 
 
 def env_residual_rms(env, xs, ys):
