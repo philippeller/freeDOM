@@ -47,7 +47,7 @@ def build_service_conf(hitnet, chargenet, theta_prior, t_prior):
             "invalid_llh": 1e9,
             "prior": False,
             "Tprior": t_prior,
-            "custom_objects": {'prior_trafo': prior_trafo}
+            "custom_objects": {"prior_trafo": prior_trafo},
         },
     }
 
@@ -59,13 +59,13 @@ def main():
     parser.add_argument(
         "--hitnet",
         type=str,
-        default="/cvmfs/icecube.opensciencegrid.org/users/peller/freeDOM/resources/HitNet_ranger_total_11_Feb_2021-10h09/epoch_32_model.hdf5",
+        default="/cvmfs/icecube.opensciencegrid.org/users/peller/freeDOM/resources/HitNet_ranger_total_26_Mar_2021-10h02/epoch_32_model.hdf5",
         help="""hitnet file path""",
     )
     parser.add_argument(
         "--chargenet",
         type=str,
-        default="/cvmfs/icecube.opensciencegrid.org/users/peller/freeDOM/resources/ChargeNet_normed_21_Feb_2021-18h14/epoch_1000_model.hdf5",
+        default="/cvmfs/icecube.opensciencegrid.org/users/peller/freeDOM/resources/ChargeNet_normed_23_Mar_2021-13h58/epoch_1000_model.hdf5",
         help="""chargenet file path""",
     )
     parser.add_argument(
