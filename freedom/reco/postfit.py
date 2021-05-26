@@ -8,6 +8,7 @@ __author__ = "Aaron Fienberg"
 import numpy as np
 from numpy.polynomial import polynomial as poly, Polynomial
 from scipy.spatial import ConvexHull
+from scipy.spatial.qhull import QhullError
 from freedom.utils.i3frame_dataloader import DEFAULT_LABELS
 
 DELTA_LLH_CUT = 15
@@ -143,7 +144,7 @@ def hull_area(par, llhs, above_min=1):
     try:
         Hull = ConvexHull(np.stack([par, llhs]).T[llhs < min_llh+above_min])
         return Hull.volume
-    except:
+    except QhullError:
         return None
 
 
