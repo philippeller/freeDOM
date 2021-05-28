@@ -112,9 +112,9 @@ class LLHService:
     ):
         if (chargenet_file is None) + (stringnet_file is None) + (
             domnet_file is None
-        ) + (layernet_file is None) != 3:
+        ) + (layernet_file is None) < 3:
             raise RuntimeError(
-                "You must select exactly one of chargenet, stringnet, layernet, or domnet."
+                "You must select no more than one of chargenet, stringnet, layernet, or domnet."
             )
 
         self._work_reqs = []
@@ -199,6 +199,9 @@ class LLHService:
                     domnet, n_hypo_params, ndoms, features_per_dom
                 )
 
+            else:
+                chargenet = None
+
             self._model = (hitnet, chargenet)
 
             self._eval_llh = eval_llh.freedom_nllh
@@ -207,7 +210,7 @@ class LLHService:
             self._eval_llh = fake_eval_llh
 
         if boundary_guard is not None:
-            self._init_boundary_guard(**boundary_guard)
+            self._boundary_guard = self.init_boundary_guard(**boundary_guard)
         else:
             self._boundary_guard = None
 
@@ -307,39 +310,6 @@ class LLHService:
 
         self._req_sock = req_sock
         self._ctrl_sock = ctrl_sock
-
-    def _init_boundary_guard(
-        self,
-        file,
-        param_limits,
-        bg_lim,
-        invalid_llh,
-        prior=False,
-        Tprior=None,
-        custom_objects=None,
-    ):
-        if custom_objects == None:
-            model = tf.keras.models.load_model(file)
-        else:
-            model = tf.keras.models.load_model(file, custom_objects=custom_objects)
-        param_limits = tf.constant(param_limits, tf.float32)
-        bg_lim = tf.constant(bg_lim, tf.float32)
-        invalid_llh = tf.constant(invalid_llh, tf.float32)
-        prior = tf.constant(prior, tf.bool)
-        if Tprior is not None:
-            with open(Tprior, "rb") as F:
-                Tprior = pickle.load(F)
-            Tprior = UnivariateSpline._from_tck(Tprior)
-            Tprior.ext = 1
-
-        self._boundary_guard = dict(
-            model=model,
-            param_limits=param_limits,
-            bg_lim=bg_lim,
-            invalid_llh=invalid_llh,
-            prior=prior,
-            Tprior=Tprior,
-        )
 
     def __enter__(self):
         return self
@@ -521,3 +491,36 @@ class LLHService:
             filename = f"{pkg_resources.resource_filename('freedom', 'resources/models')}/{filename}"
 
         return filename
+
+    @staticmethod
+    def init_boundary_guard(
+        file,
+        param_limits,
+        bg_lim,
+        invalid_llh,
+        prior=False,
+        Tprior=None,
+        custom_objects=None,
+    ):
+        if custom_objects == None:
+            model = tf.keras.models.load_model(file)
+        else:
+            model = tf.keras.models.load_model(file, custom_objects=custom_objects)
+        param_limits = tf.constant(param_limits, tf.float32)
+        bg_lim = tf.constant(bg_lim, tf.float32)
+        invalid_llh = tf.constant(invalid_llh, tf.float32)
+        prior = tf.constant(prior, tf.bool)
+        if Tprior is not None:
+            with open(Tprior, "rb") as F:
+                Tprior = pickle.load(F)
+            Tprior = UnivariateSpline._from_tck(Tprior)
+            Tprior.ext = 1
+
+        return dict(
+            model=model,
+            param_limits=param_limits,
+            bg_lim=bg_lim,
+            invalid_llh=invalid_llh,
+            prior=prior,
+            Tprior=Tprior,
+        )
