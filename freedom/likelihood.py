@@ -17,7 +17,9 @@ class LLH():
                  hitnet_batchsize=4096,
                  stringnet_batchsize=4096,
                  layernet_batchsize=4096,
-                 domnet_batchsize=4096
+                 domnet_batchsize=4096,
+                 hitnet_trafo=hitnet_trafo,
+                 chargenet_trafo=chargenet_trafo
                  ):
         '''
         *net_file : str
@@ -180,6 +182,8 @@ class upgrade_LLH():
                  all_chargenet_file=None,
                  chargenet_batchsize=4096,
                  hitnet_batchsize=4096,
+                 hitnet_trafo=hitnet_trafo,
+                 chargenet_trafo=chargenet_trafo
                  ):
         '''
         *net_file : str
@@ -347,4 +351,4 @@ class upgrade_LLH():
         total_llh_DEgg = all_hits_llh_DEgg + charge_llh_DEgg
         total_llh = total_llh_DOM + total_llh_mDOM + total_llh_DEgg #+ charge_llh_all
 
-        return total_llh, total_llh_DOM, total_llh_mDOM, total_llh_DEgg, charge_llh_all
+        return total_llh, total_llh_DOM, total_llh_mDOM, total_llh_DEgg #, charge_llh_all
