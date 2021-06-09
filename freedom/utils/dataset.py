@@ -179,6 +179,12 @@ class DataGenerator(tf.keras.utils.Sequence): # for HitNet and (total) ChargeNet
                 self.data = np.append(self.data, data, axis=0)
                 self.params = np.append(self.params, params, axis=0)
         
+        if func == load_hits:
+            #spread absolute time values
+            time_shifts = np.clip(np.random.normal(0, 1500, len(self.data)), -5000, 5000)
+            self.data[:, 3] += time_shifts
+            self.params[:, 3] += time_shifts
+        
         if shuffle == 'inDOM':
             self.shuffle_params_inDOM()
         else:
@@ -222,9 +228,9 @@ class DataGenerator(tf.keras.utils.Sequence): # for HitNet and (total) ChargeNet
         
     def shuffle_params_inDOM(self):
         shuffled_params = np.empty_like(self.params)
-        u,c = np.unique(self.data[:, 10], return_counts=True)
+        u,c = np.unique(self.data[:, 9], return_counts=True)
         for DOM_index in u[c>1]:
-            mask = self.data[:, 10] == DOM_index
+            mask = self.data[:, 9] == DOM_index
             shuffled_params[mask] = np.random.permutation(self.params[mask])
         
         self.shuffled_params = shuffled_params
