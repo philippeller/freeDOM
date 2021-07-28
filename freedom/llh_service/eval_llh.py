@@ -44,7 +44,10 @@ def freedom_nllh(
     dense_theta = tf.repeat(theta, n_obs, axis=0)
 
     # charge net calculation
-    charge_llhs = -1 * chargenet([evt_data, theta])[:, -1]
+    if chargenet is not None:
+        charge_llhs = -1 * chargenet([evt_data, theta])[:, -1]
+    else:
+        charge_llhs = tf.zeros((theta.shape[0]), tf.float32)
 
     # hit net calculation
     hit_llhs = -1 * hitnet([hit_data, dense_theta])
