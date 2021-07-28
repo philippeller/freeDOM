@@ -1,6 +1,8 @@
 """Transformation tensorflow layers"""
 import tensorflow as tf
+#import numpy as np
 from scipy import constants
+import pkg_resources
 
 
 class hitnet_trafo(tf.keras.layers.Layer):
@@ -188,7 +190,7 @@ class hitnet_trafo(tf.keras.layers.Layer):
         tres = self.TimeResidual(hit, params)
 
         #cascade_energy = tf.math.log(tf.clip_by_value(params[:, self.cascade_energy_idx], self.min_energy, self.max_energy))
-        #track_energy = tf.math.log(tf.clip_by_value(params[:, self.track_energy_idx], self.min_energy, self.max_energy))
+        track_energy = tf.math.log(tf.clip_by_value(params[:, self.track_energy_idx], self.min_energy, self.max_energy))
         energy = params[:, self.cascade_energy_idx] + params[:, self.track_energy_idx]
         track_fraction = params[:, self.track_energy_idx] / energy
         
@@ -200,8 +202,37 @@ class hitnet_trafo(tf.keras.layers.Layer):
             cos_pmtd = tf.clip_by_value((pmt_x*dx + pmt_y*dy + pmt_z*dz)/(dist), -1, 1) # pmt looks to event?
             cos_dird = tf.clip_by_value((dir_x*dx + dir_y*dy + dir_z*dz)/(dist), -1, 1) # event flies to pmt?
             
-            out = [tres, dist, costhetadir, absdeltaphidir, dir_x, dir_y, dir_z, dx, dy, dz, delta, #dt,
-                   hit[:,0], hit[:,1], hit[:,2], hit[:,3], hit[:,5], cos_pmtd, cos_dird, track_fraction]
+            #out = [tres, dist, costhetadir, absdeltaphidir, dir_x, dir_y, dir_z, dx, dy, dz, delta, #dt,
+            #       hit[:,0], hit[:,1], hit[:,2], hit[:,3], hit[:,5], cos_pmtd, cos_dird, track_fraction]
+             
+            tres = tf.math.sign(tres)*tf.math.log1p(tf.math.abs(tres))
+            dist = tf.math.log1p(dist)
+            delta = tf.math.sign(delta)*tf.math.log1p(tf.math.abs(delta))
+            dx = tf.math.sign(dx)*tf.math.log1p(tf.math.abs(dx))
+            dy = tf.math.sign(dy)*tf.math.log1p(tf.math.abs(dy))
+            dz = tf.math.sign(dz)*tf.math.log1p(tf.math.abs(dz))
+            
+            out = [(tres+10.)/20.,
+                   dist/7.3,
+                   costhetadir,
+                   absdeltaphidir/3.128253,
+                   (dir_x+1.)/2.,
+                   (dir_y+1.)/2.,
+                   (dir_z+1.)/2.,
+                   (dx+7.3)/14.3,
+                   (dy+7.3)/14.3,
+                   (dz+7.3)/14.3,
+                   (delta+8.)/16.,
+                   (hit[:,0]+5.71e+02)/1.15e+03,
+                   (hit[:,1]+5.21e+02)/1.04e+03,
+                   (hit[:,2]+5.13e+02)/1.04e+03,
+                   (hit[:,3]-5.72e+03)/1.99e+04,
+                   hit[:,5],
+                   (cos_pmtd+1.)/2.,
+                   (cos_dird+1.)/2.,
+                   track_fraction,
+                  ]
+            
         else:
             cascade_energy = tf.math.log(tf.clip_by_value(params[:, self.cascade_energy_idx], self.min_energy, self.max_energy))
             track_energy = tf.math.log(tf.clip_by_value(params[:, self.track_energy_idx], self.min_energy, self.max_energy))
@@ -212,7 +243,7 @@ class hitnet_trafo(tf.keras.layers.Layer):
         out = tf.stack(out, axis=1)
 
         return out
-    
+
 class domnet_trafo(tf.keras.layers.Layer):
     '''Class to transfor inputs for domnet
     '''
@@ -459,7 +490,7 @@ class layernet_trafo(tf.keras.layers.Layer):
                 )    
             
         return out
-    
+
 class chargenet_trafo(tf.keras.layers.Layer):
     '''Class to transfor inputs for Charget Net
     '''
@@ -487,6 +518,9 @@ class chargenet_trafo(tf.keras.layers.Layer):
         self.cascade_energy_idx = labels.index('cascade_energy')
         self.track_energy_idx = labels.index('track_energy')
         
+        self.det_x = [31.25, 72.37, 41.6, 106.94, 113.19, 57.2, -9.68, -10.97]
+        self.det_y = [-72.93, -66.6, 35.49, 27.09, -60.47, -105.52, -79.5, 6.72]
+        
     def get_config(self):
         return {'labels': self.labels, 'max_energy': self.min_energy, 'max_energy': self.max_energy}
     
@@ -507,7 +541,6 @@ class chargenet_trafo(tf.keras.layers.Layer):
         dir_y = tf.math.sin(params[:, self.zenith_idx]) * tf.math.sin(params[:, self.azimuth_idx])
         dir_z = tf.math.cos(params[:, self.zenith_idx])
         
-
         #cascade_energy = tf.math.log(tf.clip_by_value(params[:, self.cascade_energy_idx], self.min_energy, self.max_energy))
         #track_energy = tf.math.log(tf.clip_by_value(params[:, self.track_energy_idx], self.min_energy, self.max_energy))
         energy = params[:, self.cascade_energy_idx] + params[:, self.track_energy_idx]
@@ -515,27 +548,40 @@ class chargenet_trafo(tf.keras.layers.Layer):
         track_fraction = params[:, self.track_energy_idx] / energy 
         energy = tf.math.log(tf.clip_by_value(energy, self.min_energy, self.max_energy))
         energy_ratio = tf.clip_by_value(tf.math.log(energy_ratio), -8.7, 8.7)
-        '''
+        
+        #x_dists = tf.repeat(params[:, self.x_idx], len(self.det_x)) - tf.tile(self.det_x, [len(params[:, self.x_idx])])
+        #y_dists = tf.repeat(params[:, self.y_idx], len(self.det_y)) - tf.tile(self.det_y, [len(params[:, self.y_idx])])
+        #string_dist = tf.math.log(1/tf.math.sqrt(x_dists**2 + y_dists**2 + 1))
+        #min_dist = tf.math.reduce_max(tf.reshape(string_dist, (len(params[:, self.x_idx]), len(self.det_x))), axis=1)
+        #mean_dist = tf.math.reduce_mean(tf.reshape(string_dist, (len(params[:, self.x_idx]), len(self.det_x))), axis=1)
+        
         if charge.shape[1] == 2:
             out = tf.stack([
                      charge[:,0]/2.0e4,
-                     charge[:,1]/5.41e2, #n_channels
+                     charge[:,1]/5.41e2,
+                     #tf.math.log1p(charge[:,0])/10.0,
+                     #tf.math.log1p(charge[:,1])/6.0, #n_channels
                      (params[:, self.x_idx]+750)/1.576e3,
                      (params[:, self.y_idx]+805)/1.577e3,
                      (params[:, self.z_idx]+1115)/1.538e3,
                      (dir_x+1)/2.,
                      (dir_y+1)/2.,
                      (dir_z+1)/2.,
-                     (cascade_energy+2.2)/11.44,
-                     (track_energy+2.3)/11.49,
+                     #(cascade_energy+2.2)/11.44,
+                     #(track_energy+2.3)/11.49,
+                     (energy+1.37)/10.6,
+                     (energy_ratio+8.7)/17.4,
+                     track_fraction,
+                     #(min_dist+6.58)/6.571,
+                     #(mean_dist+6.68)/2.98,
                     ],
                     axis=1
                     )
-        '''
-        if charge.shape[1] == 2:
+        elif charge.shape[1] == 3:
             out = tf.stack([
                      charge[:,0]/2.0e4,
                      charge[:,1]/5.41e2, #n_channels
+                     charge[:,2]/44., #n_strings
                      (params[:, self.x_idx]+750)/1.576e3,
                      (params[:, self.y_idx]+805)/1.577e3,
                      (params[:, self.z_idx]+1115)/1.538e3,
@@ -573,39 +619,62 @@ class chargenet_trafo(tf.keras.layers.Layer):
 
         return out
     
-class prior_trafo(tf.keras.layers.Layer):
-    def __init__(self, **kwargs):        
-        super().__init__()
-
-    def call(self, params):
-        PI = tf.constant(constants.pi)
-        dir_x = (tf.math.sin(params[:, 5]*PI) * tf.math.cos(params[:, 4]*2*PI) + 1.) / 2.
-        dir_y = (tf.math.sin(params[:, 5]*PI) * tf.math.sin(params[:, 4]*2*PI) + 1.) / 2.
-        dir_z = (tf.math.cos(params[:, 5]*PI) + 1.) / 2.
-
-        #cascade_energy = tf.math.log(tf.clip_by_value(1e3*params[:, 6], 0.1, 1.05e3))
-        #cascade_energy = (cascade_energy - tf.math.log(0.1)) / (tf.math.log(1e3)-tf.math.log(0.1))
-        #track_energy = tf.math.log(tf.clip_by_value(1e3*params[:, 7], 0.1, 1.05e3))
-        #track_energy = (track_energy - tf.math.log(0.1)) / (tf.math.log(1e3)-tf.math.log(0.1))
-        total_e = tf.math.log(tf.clip_by_value(1e3*(params[:, 6]+params[:, 7]), 0.1, 2e3))#
-        track_frac = params[:, 7] / (params[:, 6]+params[:, 7])
-        total_e = (total_e - tf.math.log(0.1)) / (tf.math.log(2e3)-tf.math.log(0.1))
+class c_trafo(tf.keras.layers.Layer):
+    def call(self, theta):
+        dir_x = tf.math.sin(theta[:, 5]) * tf.math.cos(theta[:, 4])
+        dir_y = tf.math.sin(theta[:, 5]) * tf.math.sin(theta[:, 4])
+        dir_z = tf.math.cos(theta[:, 5])
+        cascade_energy = tf.math.log(tf.clip_by_value(theta[:,6], 0.1, 1e4))
+        track_energy = tf.math.log(tf.clip_by_value(theta[:,7], 0.1, 1e4))
         
         out = tf.stack([
-                 params[:,0],
-                 params[:,1],
-                 params[:,2],
-                 params[:,3],
-                 dir_x,
-                 dir_y,
-                 dir_z,
-                 total_e,
-                 track_frac,
+                 (theta[:,0]+750)/1.576e3,
+                 (theta[:,1]+805)/1.577e3,
+                 (theta[:,2]+1115)/1.538e3,
+                 (dir_x+1)/2.,
+                 (dir_y+1)/2.,
+                 (dir_z+1)/2.,
+                 (cascade_energy+2.2)/11.44,
+                 (track_energy+2.3)/11.49,
                 ],
                 axis=1
                 )    
-            
         return out
+
+class prior_trafo(tf.keras.layers.Layer):
+    def __init__(self, trainable=False, name='InputTransformer', **kwargs):
+        super().__init__(trainable=False, name=name, **kwargs)
+        
+    def call(self, inputs, **kwargs):
+        zeni = (tf.math.cos(inputs[:,5]) + self.minima[5]) / (self.maxima[5] + abs(self.minima[5]))
+        cascade = (tf.math.log(inputs[:, 6]) + self.minima[6]) / (self.maxima[6] + abs(self.minima[6]))
+        track = (tf.math.log(tf.clip_by_value(inputs[:, 7], clip_value_min=1e-3, clip_value_max=1e12)) + abs(self.minima[7])) / (self.maxima[7] + abs(self.minima[7]))
+        
+        out = tf.stack([
+                 (inputs[:,0] + abs(self.minima[0])) / (self.maxima[0] + abs(self.minima[0])),
+                 (inputs[:,1] + abs(self.minima[1])) / (self.maxima[1] + abs(self.minima[1])),
+                 (inputs[:,2] + abs(self.minima[2])) / (self.maxima[2] + abs(self.minima[2])),
+                 (inputs[:,4] + abs(self.minima[4])) / (self.maxima[4] + abs(self.minima[4])),
+                 zeni,
+                 cascade,
+                 track,
+                ],
+                axis=1
+                )    
+        return out
+    
+    @property
+    def maxima(self) -> tf.constant:
+        a = tf.constant(
+            [8.26402465820312500000 * 1e2, 7.72468811035156250000 * 1e2, 4.23771453857421875000 * 1e2,0, 2 * constants.pi, 1,
+             9.20983600616455078125, 9.19035434722900390625])
+        return a
+    
+    @property
+    def minima(self) -> tf.constant:
+        a = tf.constant([-750.53778076171875, -805.071533203125, -1114.884033203125,0, 0, -1, -2.23472332954406738281,
+                         -6.90775537490844726562])
+        return a
 
 
 def test_hitnet_trafo():
