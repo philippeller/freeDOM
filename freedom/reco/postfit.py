@@ -145,7 +145,7 @@ def hull_area(par, llhs, above_min=1):
         Hull = ConvexHull(np.stack([par, llhs]).T[llhs < min_llh+above_min])
         return Hull.volume
     except QhullError:
-        return None
+        return np.inf
 
 
 def furthest_point(par, llhs, above_min=2):
