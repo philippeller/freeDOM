@@ -12,7 +12,7 @@ class hitnet_trafo(tf.keras.layers.Layer):
     speed_of_light = constants.c * 1e-9 # c in m / ns
 
     
-    def __init__(self, labels, min_energy=0.1, max_energy=1e4, use_pmt_dir=False):
+    def __init__(self, labels, min_energy=0.1, max_energy=1e4, use_pmt_dir=False, correct_SLC=False):
         '''
         Parameters:
         -----------
@@ -27,6 +27,7 @@ class hitnet_trafo(tf.keras.layers.Layer):
         self.min_energy = min_energy
         self.max_energy = max_energy
         self.use_pmt_dir = use_pmt_dir
+        self.correct_SLC = correct_SLC
         
         self.azimuth_idx = labels.index('azimuth')
         self.zenith_idx = labels.index('zenith')
@@ -45,7 +46,7 @@ class hitnet_trafo(tf.keras.layers.Layer):
 
     def get_config(self):
         return {'labels': self.labels, 'max_energy': self.min_energy, 'max_energy': self.max_energy, 
-                'use_pmt_dir': self.use_pmt_dir}
+                'use_pmt_dir': self.use_pmt_dir, 'correct_SLC': self.correct_SLC}
 
 
     def TimeResidual(self, hits, params, Index=1.33):
@@ -154,6 +155,11 @@ class hitnet_trafo(tf.keras.layers.Layer):
             shape (N, len(labels))
 
         '''
+        #correct SLC times
+        if self.correct_SLC:
+            SLC_cor = tf.where(hit[:, 5]==0, -25., 0.)
+        else:
+            SLC_cor = 0.
         
         cosphi = tf.math.cos(params[:, self.azimuth_idx])
         sinphi = tf.math.sin(params[:, self.azimuth_idx])
@@ -184,10 +190,10 @@ class hitnet_trafo(tf.keras.layers.Layer):
         # so it is 0 at the poles?
         absdeltaphidir *= sintheta * sinthetadir
         
-        dt = hit[:,3] - params[:, self.time_idx]
+        dt = hit[:, 3] - params[:, self.time_idx] + SLC_cor
         ## difference c*t - r
         delta = dt * self.speed_of_light - dist
-        tres = self.TimeResidual(hit, params)
+        tres = self.TimeResidual(hit, params) + SLC_cor
 
         #cascade_energy = tf.math.log(tf.clip_by_value(params[:, self.cascade_energy_idx], self.min_energy, self.max_energy))
         track_energy = tf.math.log(tf.clip_by_value(params[:, self.track_energy_idx], self.min_energy, self.max_energy))
@@ -202,9 +208,9 @@ class hitnet_trafo(tf.keras.layers.Layer):
             cos_pmtd = tf.clip_by_value((pmt_x*dx + pmt_y*dy + pmt_z*dz)/(dist), -1, 1) # pmt looks to event?
             cos_dird = tf.clip_by_value((dir_x*dx + dir_y*dy + dir_z*dz)/(dist), -1, 1) # event flies to pmt?
             
-            #out = [tres, dist, costhetadir, absdeltaphidir, dir_x, dir_y, dir_z, dx, dy, dz, delta, #dt,
-            #       hit[:,0], hit[:,1], hit[:,2], hit[:,3], hit[:,5], cos_pmtd, cos_dird, track_fraction]
-             
+            out = [tres, dist, costhetadir, absdeltaphidir, dir_x, dir_y, dir_z, dx, dy, dz, delta, #dt,
+                   hit[:,0], hit[:,1], hit[:,2], hit[:,3]+SLC_cor, hit[:,5], cos_pmtd, cos_dird, track_fraction]
+            '''
             tres = tf.math.sign(tres)*tf.math.log1p(tf.math.abs(tres))
             dist = tf.math.log1p(dist)
             delta = tf.math.sign(delta)*tf.math.log1p(tf.math.abs(delta))
@@ -232,7 +238,7 @@ class hitnet_trafo(tf.keras.layers.Layer):
                    (cos_dird+1.)/2.,
                    track_fraction,
                   ]
-            
+            '''
         else:
             cascade_energy = tf.math.log(tf.clip_by_value(params[:, self.cascade_energy_idx], self.min_energy, self.max_energy))
             track_energy = tf.math.log(tf.clip_by_value(params[:, self.track_energy_idx], self.min_energy, self.max_energy))
