@@ -161,8 +161,7 @@ def store_dllh(frame, prefix, full_res, no_track_res, E_only_res):
 def to_i3_vec(array, i3_vec_type):
     """convert a list/array to an I3Vec"""
     i3_vec = i3_vec_type()
-    for val in array:
-        i3_vec.append(val)
+    i3_vec.extend(array)
     return i3_vec
 
 
