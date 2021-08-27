@@ -233,6 +233,7 @@ class hitnet_trafo(tf.keras.layers.Layer):
                    tf.math.acos(cos_pmtd),
                    tf.math.acos(cos_dird),
                    track_fraction,
+                   #tf.math.log1p(params[:, self.track_energy_idx])
                   ]
             
         else:
@@ -497,7 +498,7 @@ class chargenet_trafo(tf.keras.layers.Layer):
     '''Class to transfor inputs for Charget Net
     '''
     
-    def __init__(self, labels, min_energy=0.1, max_energy=1e4):
+    def __init__(self, labels, min_energy=0.1, max_energy=1e4, use_nCh=False):
         '''
         Parameters:
         -----------
@@ -511,6 +512,7 @@ class chargenet_trafo(tf.keras.layers.Layer):
         self.labels = labels
         self.min_energy = min_energy
         self.max_energy = max_energy
+        self.use_nCh = use_nCh
                 
         self.azimuth_idx = labels.index('azimuth')
         self.zenith_idx = labels.index('zenith')
@@ -524,7 +526,7 @@ class chargenet_trafo(tf.keras.layers.Layer):
         self.det_y = [-72.93, -66.6, 35.49, 27.09, -60.47, -105.52, -79.5, 6.72]
         
     def get_config(self):
-        return {'labels': self.labels, 'max_energy': self.min_energy, 'max_energy': self.max_energy}
+        return {'labels': self.labels, 'max_energy': self.min_energy, 'max_energy': self.max_energy, 'use_nCh': self.use_nCh}
     
     def call(self, charge, params):
         '''
@@ -549,20 +551,30 @@ class chargenet_trafo(tf.keras.layers.Layer):
         energy_ratio = params[:, self.track_energy_idx] / params[:, self.cascade_energy_idx]
         track_fraction = params[:, self.track_energy_idx] / energy 
         energy = tf.math.log(tf.clip_by_value(energy, self.min_energy, self.max_energy))
-        energy_ratio = tf.clip_by_value(tf.math.log(energy_ratio), -8.7, 8.7)
+        energy_ratio = tf.clip_by_value(tf.math.log(energy_ratio), -3, 5)
         
-        #x_dists = tf.repeat(params[:, self.x_idx], len(self.det_x)) - tf.tile(self.det_x, [len(params[:, self.x_idx])])
-        #y_dists = tf.repeat(params[:, self.y_idx], len(self.det_y)) - tf.tile(self.det_y, [len(params[:, self.y_idx])])
-        #string_dist = tf.math.log(1/tf.math.sqrt(x_dists**2 + y_dists**2 + 1))
-        #min_dist = tf.math.reduce_max(tf.reshape(string_dist, (len(params[:, self.x_idx]), len(self.det_x))), axis=1)
-        #mean_dist = tf.math.reduce_mean(tf.reshape(string_dist, (len(params[:, self.x_idx]), len(self.det_x))), axis=1)
+        tracky = tf.clip_by_value(params[:, self.track_energy_idx], 3, 10)
+        '''
+        x_dists = tf.repeat(params[:, self.x_idx], len(self.det_x)) - tf.tile(self.det_x, [len(params[:, self.x_idx])])
+        y_dists = tf.repeat(params[:, self.y_idx], len(self.det_y)) - tf.tile(self.det_y, [len(params[:, self.y_idx])])
+        sd = 1/(x_dists**2 + y_dists**2 + 1)
+        log_mean_dist = tf.math.log(tf.math.reduce_mean(tf.reshape(sd, (len(params[:, self.x_idx]), len(self.det_x))), axis=1))
+        mean_log_dist = tf.math.reduce_mean(tf.reshape(tf.math.log(sd), (len(params[:, self.x_idx]), len(self.det_x))), axis=1)
         
-        if charge.shape[1] == 2:
+        ds = tf.math.sqrt(x_dists**2 + y_dists**2)
+        dir_len = tf.clip_by_value(tf.repeat(tf.math.sqrt(dir_x**2 + dir_y**2), len(self.det_x)), 0.01, 1)
+        dird = (tf.repeat(dir_x, len(self.det_x))*x_dists + tf.repeat(dir_y, len(self.det_y))*y_dists)/(ds*dir_len)
+        sdw = (tf.clip_by_value(dird, -1, 1)+1.01) * dir_len * sd
+        log_mean_dist_w = tf.math.log(tf.math.reduce_mean(tf.reshape(sdw, (len(params[:, self.x_idx]), len(self.det_x))), axis=1))
+        mean_log_dist_w = tf.math.reduce_mean(tf.reshape(tf.math.log(sdw), (len(params[:, self.x_idx]), len(self.det_x))), axis=1)
+        '''
+        if self.use_nCh:
             out = tf.stack([
-                     charge[:,0]/2.0e4,
-                     charge[:,1]/5.41e2,
-                     #tf.math.log1p(charge[:,0])/10.0,
-                     #tf.math.log1p(charge[:,1])/6.0, #n_channels
+                     #charge[:,0]/2.0e4,
+                     #charge[:,1]/5.41e2,
+                     tf.math.log1p(charge[:,0])/10.0,
+                     tf.math.log1p(charge[:,1])/6.0, #n_channels
+                     #charge[:,2]/44.0, #n_strings
                      (params[:, self.x_idx]+750)/1.576e3,
                      (params[:, self.y_idx]+805)/1.577e3,
                      (params[:, self.z_idx]+1115)/1.538e3,
@@ -572,18 +584,19 @@ class chargenet_trafo(tf.keras.layers.Layer):
                      #(cascade_energy+2.2)/11.44,
                      #(track_energy+2.3)/11.49,
                      (energy+1.37)/10.6,
-                     (energy_ratio+8.7)/17.4,
+                     (energy_ratio+3)/8,
                      track_fraction,
-                     #(min_dist+6.58)/6.571,
-                     #(mean_dist+6.68)/2.98,
+                     (tracky-3)/7,
+                     #(log_mean_dist+13.34)/11.26,
+                     #(mean_log_dist+13.35)/5.95,
+                     #(log_mean_dist_w+18.63)/17.25,
+                     #(mean_log_dist_w+18.98)/11.7,
                     ],
                     axis=1
                     )
-        elif charge.shape[1] == 3:
+        else:
             out = tf.stack([
-                     charge[:,0]/2.0e4,
-                     charge[:,1]/5.41e2, #n_channels
-                     charge[:,2]/44., #n_strings
+                     tf.math.log1p(charge[:,0])/10.0,
                      (params[:, self.x_idx]+750)/1.576e3,
                      (params[:, self.y_idx]+805)/1.577e3,
                      (params[:, self.z_idx]+1115)/1.538e3,
@@ -591,30 +604,13 @@ class chargenet_trafo(tf.keras.layers.Layer):
                      (dir_y+1)/2.,
                      (dir_z+1)/2.,
                      (energy+1.37)/10.6,
-                     (energy_ratio+8.7)/17.4,
+                     (energy_ratio+3)/8,
                      track_fraction,
-                    ],
-                    axis=1
-                    )
-        elif charge.shape[1] == 6:
-            cascade_energy = tf.math.log(tf.clip_by_value(params[:, self.cascade_energy_idx], self.min_energy, self.max_energy))
-            track_energy = tf.math.log(tf.clip_by_value(params[:, self.track_energy_idx], self.min_energy, self.max_energy))
-        
-            out = tf.stack([
-                     charge[:,0],
-                     charge[:,1], #n_channels
-                     charge[:,2],
-                     charge[:,3], #n_channels
-                     charge[:,4],
-                     charge[:,5], #n_channels
-                     params[:, self.x_idx],
-                     params[:, self.y_idx],
-                     params[:, self.z_idx],
-                     dir_x,
-                     dir_y,
-                     dir_z,
-                     cascade_energy,
-                     track_energy,
+                     (tracky-3)/7,
+                     #(log_mean_dist+13.34)/11.26,
+                     #(mean_log_dist+13.35)/5.95,
+                     #(log_mean_dist_w+18.63)/17.25,
+                     #(mean_log_dist_w+18.98)/11.7,
                     ],
                     axis=1
                     )
