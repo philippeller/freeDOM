@@ -256,7 +256,6 @@ def fit_events(
     param_transforms=None,
     fixed_params=None,
     initial_points=None,
-    ICU = False,
     **sph_opt_kwargs,
 ):
     """fit a list of events
@@ -267,12 +266,10 @@ def fit_events(
 
     outputs = []
 
-    if ICU: # use this for ICU reco
-        clients = []
-        for i in range(3):
-            clients.append(LLHClient(ctrl_addr=ctrl_addrs[i], conf_timeout=conf_timeout))
-    else:
+    if isinstance(ctrl_addrs[index], str):
         clients = [LLHClient(ctrl_addr=ctrl_addrs[index], conf_timeout=conf_timeout)]
+    else:
+        clients = [LLHClient(ctrl_addr=addr, conf_timeout=conf_timeout) for addr in ctrl_addrs[index]]
     
     if np.all(seeds) == None:
         seeds = [None] * len(events)
