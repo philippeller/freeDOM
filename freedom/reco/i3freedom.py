@@ -28,9 +28,7 @@ class I3FreeDOMClient:
         if isinstance(ctrl_addrs, str):
             ctrl_addrs = [ctrl_addrs]
 
-        self._llh_clients = []
-        for addr in ctrl_addrs:
-            self._llh_clients.append(LLHClient(addr, conf_timeout))
+        self._llh_clients = [LLHClient(addr, conf_timeout) for addr in ctrl_addrs]
 
         if rng is None:
             self._rng = np.random.default_rng(None)

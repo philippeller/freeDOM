@@ -69,7 +69,7 @@ def load_total_charge(pulses):
     for omkey, om_pulses in pulses:
         if len(om_pulses) > 0:
             oms.add(omkey)
-        total_charge += sum(p.charge for p in om_pulses)
+            total_charge += sum(p.charge for p in om_pulses)
 
     return [total_charge, len(oms)]
 
@@ -101,44 +101,54 @@ def load_hits(pulses, geo, pmt_directions):
     return hits
 
 
+def load_reco_series(frame, geo, series_name, ug_geo=None, mdom_directions=None):
+    """ load hits and total charge from a single pulse series
+
+        handles OM-type-dependent behavior
+    """
+    pulses = frame[series_name]
+    try:
+        pulses = pulses.apply(frame)
+    except AttributeError:
+        # pulses is not a MapMask, no need to call apply
+        pass
+
+    if "mDOM" in series_name:
+        om_geo = ug_geo
+        pmt_directions = mdom_directions
+    elif "DEgg" in series_name:
+        om_geo = ug_geo
+        pmt_directions = [[0, np.pi], [np.pi, np.pi]]
+    elif "PDOM" in series_name:
+        om_geo = ug_geo
+        pmt_directions = [[0, np.pi]]
+    else:
+        om_geo = geo
+        pmt_directions = [[0, np.pi]]
+
+    if om_geo is None or pmt_directions is None:
+        raise ValueError(
+            "The `ug_geo` and `mdom_directions` arguments are required when running Upgrade reco!"
+        )
+
+    return dict(
+        hits=load_hits(pulses, om_geo, pmt_directions),
+        total_charge=load_total_charge(pulses),
+    )
+
+
 def load_event(frame, geo, reco_pulse_series_names, ug_geo=None, mdom_directions=None):
     """extract an event from an i3frame"""
-    params = load_params(frame)
-
     if isinstance(reco_pulse_series_names, str):
         reco_pulse_series_names = [reco_pulse_series_names]
 
     hits = []
     total_charge = []
+    for series in reco_pulse_series_names:
+        series_data = load_reco_series(frame, geo, series, ug_geo, mdom_directions)
+        hits.append(series_data["hits"])
+        total_charge.append(series_data["total_charge"])
 
-    for pulse_series in reco_pulse_series_names:
-        pulses = frame[pulse_series]
-
-        try:
-            pulses = pulses.apply(frame)
-        except AttributeError:
-            # pulses is not a MapMask, no need to call apply
-            pass
-
-        if "mDOM" in pulse_series:
-            om_geo = ug_geo
-            pmt_directions = mdom_directions
-        elif "DEgg" in pulse_series:
-            om_geo = ug_geo
-            pmt_directions = [[0, np.pi], [np.pi, np.pi]]
-        elif "PDOM" in pulse_series:
-            om_geo = ug_geo
-            pmt_directions = [[0, np.pi]]
-        else:
-            om_geo = geo
-            pmt_directions = [[0, np.pi]]
-
-        if om_geo is None or pmt_directions is None:
-            raise ValueError(
-                "The `ug_geo` and `mdom_directions` arguments are required when running Upgrade reco!"
-            )
-
-        hits.append(load_hits(pulses, om_geo, pmt_directions))
-        total_charge.append(load_total_charge(pulses))
+    params = load_params(frame)
 
     return dict(hit_data=hits, evt_data=total_charge, params=params)
