@@ -48,8 +48,8 @@ def load_params(
 ):
     """extract truth parameters from an i3frame"""
     try:
-        mc_primary = frame["MCInIcePrimary"]
         mc_tree = frame["I3MCTree"]
+        mc_primary = mc_tree[0]
     except KeyError:
         # no MC info
         return None
@@ -67,13 +67,14 @@ def load_total_charge(pulses):
     oms = set()
     total_charge = 0
     for omkey, om_pulses in pulses:
-        oms.add(omkey)
+        if len(om_pulses) > 0:
+            oms.add(omkey)
         total_charge += sum(p.charge for p in om_pulses)
 
     return [total_charge, len(oms)]
 
 
-def load_hits(pulses, geo):
+def load_hits(pulses, geo, pmt_directions):
     """extract hit parameters from a I3RecoPulseSeriesMap"""
     n_pulses = sum(len(pulse_vec) for pulse_vec in pulses.values())
 
@@ -83,16 +84,16 @@ def load_hits(pulses, geo):
         om_idx = omkey.om - 1
         pmt_idx = omkey.pmt
         string_idx = omkey.string - 1
-        flat_idx = string_idx * 60 + om_idx
+        flat_idx = string_idx * 113 + om_idx * 24 + pmt_idx
 
         n_dom_pulses = len(om_pulses)
-        hits_view[:n_dom_pulses, :3] = geo[string_idx, om_idx]
+        hits_view[:n_dom_pulses, :3] = geo[string_idx % 86, om_idx]
         for i, pulse in enumerate(om_pulses):
             hits_view[i, 3] = pulse.time
             hits_view[i, 4] = pulse.charge
             hits_view[i, 5] = pulse.flags & 1
             hits_view[i, 6] = (pulse.flags & 2) >> 1
-            hits_view[i, 7:9] = [0, np.pi]  # handle Gen 1 DOMs for now
+            hits_view[i, 7:9] = pmt_directions[pmt_idx]
             hits_view[i, 9] = flat_idx
 
         hits_view = hits_view[n_dom_pulses:]
@@ -100,17 +101,44 @@ def load_hits(pulses, geo):
     return hits
 
 
-def load_event(frame, geo, reco_pulse_series_name):
+def load_event(frame, geo, reco_pulse_series_names, ug_geo=None, mdom_directions=None):
     """extract an event from an i3frame"""
-    pulses = frame[reco_pulse_series_name]
-    try:
-        pulses = pulses.apply(frame)
-    except AttributeError:
-        # pulses is not a MapMask, no need to call apply
-        pass
-
-    hits = load_hits(pulses, geo)
-    total_charge = load_total_charge(pulses)
     params = load_params(frame)
 
-    return dict(hit_data=[hits], evt_data=[total_charge], params=params)
+    if isinstance(reco_pulse_series_names, str):
+        reco_pulse_series_names = [reco_pulse_series_names]
+
+    hits = []
+    total_charge = []
+
+    for pulse_series in reco_pulse_series_names:
+        pulses = frame[pulse_series]
+
+        try:
+            pulses = pulses.apply(frame)
+        except AttributeError:
+            # pulses is not a MapMask, no need to call apply
+            pass
+
+        if "mDOM" in pulse_series:
+            om_geo = ug_geo
+            pmt_directions = mdom_directions
+        elif "DEgg" in pulse_series:
+            om_geo = ug_geo
+            pmt_directions = [[0, np.pi], [np.pi, np.pi]]
+        elif "PDOM" in pulse_series:
+            om_geo = ug_geo
+            pmt_directions = [[0, np.pi]]
+        else:
+            om_geo = geo
+            pmt_directions = [[0, np.pi]]
+
+        if om_geo is None or pmt_directions is None:
+            raise ValueError(
+                "The `ug_geo` and `mdom_directions` arguments are required when running Upgrade reco!"
+            )
+
+        hits.append(load_hits(pulses, om_geo, pmt_directions))
+        total_charge.append(load_total_charge(pulses))
+
+    return dict(hit_data=hits, evt_data=total_charge, params=params)
