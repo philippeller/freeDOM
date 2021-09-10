@@ -59,7 +59,7 @@ def main():
     parser.add_argument(
         "--hitnet",
         type=str,
-        default="/cvmfs/icecube.opensciencegrid.org/users/peller/freeDOM/resources/HitNet_ranger_13_Aug_2021-17h39/epoch_25_model.hdf5",
+        default="/cvmfs/icecube.opensciencegrid.org/users/peller/freeDOM/resources/HitNet_ranger_06_Sep_2021-18h50/epoch_25_model.hdf5",
         help="""hitnet file path""",
     )
     parser.add_argument(
