@@ -12,7 +12,7 @@ class hitnet_trafo(tf.keras.layers.Layer):
     speed_of_light = constants.c * 1e-9 # c in m / ns
 
     
-    def __init__(self, labels, min_energy=0.1, max_energy=1e4, use_pmt_dir=False, correct_SLC=False):
+    def __init__(self, labels, min_energy=0.1, max_energy=1e4):
         '''
         Parameters:
         -----------
@@ -26,8 +26,6 @@ class hitnet_trafo(tf.keras.layers.Layer):
         self.labels = labels
         self.min_energy = min_energy
         self.max_energy = max_energy
-        self.use_pmt_dir = use_pmt_dir
-        self.correct_SLC = correct_SLC
         
         self.azimuth_idx = labels.index('azimuth')
         self.zenith_idx = labels.index('zenith')
@@ -45,8 +43,7 @@ class hitnet_trafo(tf.keras.layers.Layer):
         
 
     def get_config(self):
-        return {'labels': self.labels, 'max_energy': self.min_energy, 'max_energy': self.max_energy, 
-                'use_pmt_dir': self.use_pmt_dir, 'correct_SLC': self.correct_SLC}
+        return {'labels': self.labels, 'max_energy': self.min_energy, 'max_energy': self.max_energy}
 
 
     def TimeResidual(self, hits, params, Index=1.33):
@@ -155,13 +152,6 @@ class hitnet_trafo(tf.keras.layers.Layer):
             shape (N, len(labels))
 
         '''
-        #correct SLC times
-        if self.correct_SLC:
-            #SLC_cor = tf.where(hit[:, 5]==0), -25., 0.)
-            SLC_cor = -(1.-hit[:, 5]) * 25.
-        else:
-            SLC_cor = 0.
-        
         cosphi = tf.math.cos(params[:, self.azimuth_idx])
         sinphi = tf.math.sin(params[:, self.azimuth_idx])
         
@@ -185,63 +175,53 @@ class hitnet_trafo(tf.keras.layers.Layer):
         # so it is 0 at the poles?
         absdeltaphidir *= sintheta * sinthetadir
         
-        dt = hit[:, 3] - params[:, self.time_idx] + SLC_cor
+        dt = hit[:, 3] - params[:, self.time_idx]
         ## difference c*t - r
         delta = dt * self.speed_of_light - dist
-        tres = self.TimeResidual(hit, params) + SLC_cor
+        tres = self.TimeResidual(hit, params)
 
         #cascade_energy = tf.math.log(tf.clip_by_value(params[:, self.cascade_energy_idx], self.min_energy, self.max_energy))
         track_energy = tf.math.log(tf.clip_by_value(params[:, self.track_energy_idx], self.min_energy, self.max_energy))
         energy = params[:, self.cascade_energy_idx] + params[:, self.track_energy_idx]
         track_fraction = params[:, self.track_energy_idx] / energy
         
-        if self.use_pmt_dir:
-            pmt_x = tf.math.sin(hit[:,7]) * tf.math.cos(hit[:,8])
-            pmt_y = tf.math.sin(hit[:,7]) * tf.math.sin(hit[:,8])
-            pmt_z = tf.math.cos(hit[:,7])
-            
-            cos_pmtd = tf.clip_by_value((pmt_x*dx + pmt_y*dy + pmt_z*dz)/(dist), -1, 1) # pmt looks to event?
-            cos_dird = tf.clip_by_value((dir_x*dx + dir_y*dy + dir_z*dz)/(dist), -1, 1) # event flies to pmt?
-            
-            #out = [tres, dist, costhetadir, absdeltaphidir, dir_x, dir_y, dir_z, dx, dy, dz, delta, #dt,
-            #       hit[:,0], hit[:,1], hit[:,2], hit[:,3]+SLC_cor, hit[:,5], cos_pmtd, cos_dird, track_fraction]
-            
-            tres = tf.where(tres<0, -tf.math.log1p(-tres), tf.math.log1p(tres)) #tres/1000.
-            dist = tf.math.log1p(dist)
-            rho = tf.math.log1p(rho)
-            delta = tf.where(delta<0, -tf.math.log1p(-delta), tf.math.log1p(delta)) #delta/500.
-            #dt = tf.where(dt<0, -tf.math.log1p(-dt), tf.math.log1p(dt)) #dt/1000.
-            
-            out = [tres,
-                   dist,
-                   rho,
-                   tf.math.acos(costhetadir),
-                   absdeltaphidir/3.128253,
-                   dir_x,
-                   dir_y,
-                   dir_z,
-                   dx/1000.,
-                   dy/1000.,
-                   dz/1000.,
-                   #dt,
-                   delta,
-                   (hit[:,0]+5.71e+02)/1.15e+03,
-                   (hit[:,1]+5.21e+02)/1.04e+03,
-                   (hit[:,2]+5.13e+02)/1.04e+03,
-                   (hit[:,3]+SLC_cor-5.72e+03)/1.99e+04,
-                   #hit[:,5],
-                   tf.math.acos(cos_pmtd),
-                   tf.math.acos(cos_dird),
-                   track_fraction,
-                   #tf.math.log1p(params[:, self.track_energy_idx])
-                  ]
-            
-        else:
-            cascade_energy = tf.math.log(tf.clip_by_value(params[:, self.cascade_energy_idx], self.min_energy, self.max_energy))
-            track_energy = tf.math.log(tf.clip_by_value(params[:, self.track_energy_idx], self.min_energy, self.max_energy))
-            
-            out = [delta, dist, costhetadir, absdeltaphidir, dir_x, dir_y, dir_z, dx, dy, dz, hit[:,0], hit[:,1], hit[:,2],
-                   hit[:,5], hit[:,6], cascade_energy, track_energy]
+        pmt_x = tf.math.sin(hit[:,7]) * tf.math.cos(hit[:,8])
+        pmt_y = tf.math.sin(hit[:,7]) * tf.math.sin(hit[:,8])
+        pmt_z = tf.math.cos(hit[:,7])
+
+        cos_pmtd = tf.clip_by_value((pmt_x*dx + pmt_y*dy + pmt_z*dz)/(dist), -1, 1) # pmt looks to event?
+        cos_dird = tf.clip_by_value((dir_x*dx + dir_y*dy + dir_z*dz)/(dist), -1, 1) # event flies to pmt?
+
+        delta = tres - delta #
+        delta = tf.where(delta<0, -tf.math.log1p(-delta), tf.math.log1p(delta))
+        tres = tf.where(tres<0, -tf.math.log1p(-tres), tf.math.log1p(tres))
+        dist = tf.math.log1p(dist)
+        rho = tf.math.log1p(rho)
+        #dt = tf.where(dt<0, -tf.math.log1p(-dt), tf.math.log1p(dt)) #dt/1000.
+
+        out = [tres,
+               dist,
+               rho,
+               tf.math.acos(costhetadir),
+               absdeltaphidir/3.128253,
+               dir_x,
+               dir_y,
+               dir_z,
+               dx/1000.,
+               dy/1000.,
+               dz/1000.,
+               #dt,
+               delta,
+               (hit[:,0]+5.71e+02)/1.15e+03,
+               (hit[:,1]+5.21e+02)/1.04e+03,
+               (hit[:,2]+5.13e+02)/1.04e+03,
+               (hit[:,3]-5.72e+03)/1.99e+04,
+               #hit[:,5],
+               tf.math.acos(cos_pmtd),
+               tf.math.acos(cos_dird),
+               track_fraction,
+               #tf.math.log1p(params[:, self.track_energy_idx])
+              ]
         
         out = tf.stack(out, axis=1)
 

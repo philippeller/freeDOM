@@ -28,7 +28,7 @@ def kill_service(ctrl_addr):
             print("No response from the LLH service")
 
 
-def build_service_conf(hitnet, chargenet, theta_prior, t_prior):
+def build_service_conf(hitnet, chargenet):
     return {
         "poll_timeout": 1,
         "flush_period": 1,
@@ -40,15 +40,6 @@ def build_service_conf(hitnet, chargenet, theta_prior, t_prior):
         "recv_hwm": 10000,
         "hitnet_file": hitnet,
         "chargenet_file": chargenet,
-        "boundary_guard": {
-            "file": theta_prior,
-            "param_limits": DEFAULT_SEARCH_LIMITS,
-            "bg_lim": 0,
-            "invalid_llh": 1e9,
-            "prior": False,
-            "Tprior": t_prior,
-            "custom_objects": {"prior_trafo": prior_trafo},
-        },
     }
 
 
@@ -59,7 +50,7 @@ def main():
     parser.add_argument(
         "--hitnet",
         type=str,
-        default="/cvmfs/icecube.opensciencegrid.org/users/peller/freeDOM/resources/HitNet_ranger_13_Aug_2021-17h39/epoch_25_model.hdf5",
+        default="/cvmfs/icecube.opensciencegrid.org/users/peller/freeDOM/resources/HitNet_ranger_06_Sep_2021-18h50/epoch_25_model.hdf5",
         help="""hitnet file path""",
     )
     parser.add_argument(
@@ -67,18 +58,6 @@ def main():
         type=str,
         default="/cvmfs/icecube.opensciencegrid.org/users/peller/freeDOM/resources/ChargeNet_ranger_23_Aug_2021-18h42/epoch_1500_model.hdf5",
         help="""chargenet file path""",
-    )
-    parser.add_argument(
-        "--theta_prior",
-        type=str,
-        default=f"{resource_dir}/prior/oscNext_theta_prior_norm.hdf5",
-        help="""theta prior file path""",
-    )
-    parser.add_argument(
-        "--t_prior",
-        type=str,
-        default=f"{resource_dir}/prior/oscNext_time_residual_prior.pkl",
-        help="""time prior file path""",
     )
     parser.add_argument(
         "--cuda_device", type=int, default=0, help="""cuda device index"""
@@ -95,9 +74,7 @@ def main():
 
     args = parser.parse_args()
 
-    service_conf = build_service_conf(
-        args.hitnet, args.chargenet, args.theta_prior, args.t_prior
-    )
+    service_conf = build_service_conf(args.hitnet, args.chargenet)
 
     if args.kill:
         if args.ctrl_addr is None:
