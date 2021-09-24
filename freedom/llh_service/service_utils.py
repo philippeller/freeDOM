@@ -1,6 +1,7 @@
 """LLH service utility functions"""
 import zmq
 
+
 def kill_service(ctrl_addr):
     """kill the LLH service running at `ctrl_addr`"""
     with zmq.Context.instance().socket(zmq.REQ) as sock:
@@ -16,7 +17,7 @@ def kill_service(ctrl_addr):
 def set_service_environ(cuda_device):
     import os
     import tensorflow as tf
-    
+
     # use a single GPU
     os.environ["CUDA_VISIBLE_DEVICES"] = f"{cuda_device}"
     gpus = tf.config.list_physical_devices("GPU")

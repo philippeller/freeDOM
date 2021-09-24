@@ -44,7 +44,8 @@ _param_getters = dict(
 
 
 def load_params(
-    frame, labels=DEFAULT_LABELS,
+    frame,
+    labels=DEFAULT_LABELS,
 ):
     """extract truth parameters from an i3frame"""
     try:
@@ -84,7 +85,7 @@ def load_hits(pulses, geo, pmt_directions):
         om_idx = omkey.om - 1
         pmt_idx = omkey.pmt
         string_idx = omkey.string - 1
-        flat_idx = string_idx * 113 + om_idx * 24 + pmt_idx
+        flat_idx = string_idx * 2712 + om_idx * 24 + pmt_idx
 
         n_dom_pulses = len(om_pulses)
         hits_view[:n_dom_pulses, :3] = geo[string_idx % 86, om_idx]
@@ -102,9 +103,9 @@ def load_hits(pulses, geo, pmt_directions):
 
 
 def load_reco_series(frame, geo, series_name, ug_geo=None, mdom_directions=None):
-    """ load hits and total charge from a single pulse series
+    """load hits and total charge from a single pulse series
 
-        handles OM-type-dependent behavior
+    handles OM-type-dependent behavior
     """
     pulses = frame[series_name]
     try:

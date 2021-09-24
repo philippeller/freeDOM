@@ -4,7 +4,7 @@ import sys
 from argparse import ArgumentParser
 
 from freedom.reco.crs_reco import start_service
-from freedom.llh_service.llh_service import kill_service
+from freedom.llh_service.service_utils import kill_service
 
 ctrl_addr = "tcp://127.0.0.1:*"
 req_addr = "tcp://127.0.0.1:*"
