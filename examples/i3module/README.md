@@ -18,8 +18,9 @@ Now in your python installation where you want to run tensorflow, do a full inst
 pip install --editable .[full]
 ```
 
-obtain the model files from `cobalt:/data/user/peller/freeDOM/resources`
-adjust paths in `freeDOM/examples/i3module/service_control.py`
+<s>obtain the model files from `cobalt:/data/user/peller/freeDOM/resources`
+adjust paths in `freeDOM/examples/i3module/service_control.py`</s>
+Model files are now loaded from cvmfs, only needs to be adjusted if you want to use a different configuration.
 
 ## Reco'ing files
 
