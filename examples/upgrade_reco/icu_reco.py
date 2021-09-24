@@ -17,8 +17,9 @@ from freedom.reco import i3freedom, transforms
 
 CONF_TIMEOUT_MS = 10000
 
-# filter out frames with fewer than 8 hits
-def n_hits_filter(frame, reco_pulse_series_names):
+
+def n_hits_filter(frame, reco_pulse_series_names, n_hits=8):
+    """filter out frames with fewer than `n_hits` hits"""
     total_hits = 0
     for series_name in reco_pulse_series_names:
         pulses = frame[series_name]
@@ -27,39 +28,31 @@ def n_hits_filter(frame, reco_pulse_series_names):
         except AttributeError:
             pass
 
-        hits_this_series = 0
-        for pmt_pulses in pulses.values():
-            hits_this_series += len(pmt_pulses)
+        total_hits += sum(len(series) for series in pulses.values())
 
-        print(f"{series_name}: {hits_this_series} hits")
+    print(f"found {total_hits} hits")
 
-        total_hits += hits_this_series
-
-    print(f"Found {total_hits} total hits")
-
-    if total_hits >= 8:
+    if total_hits >= n_hits:
         return True
     else:
         return False
-
-
-# for counting events
-def evt_counter(frame):
-    evt_counter.evt_num += 1
-    print(f"Finished event {evt_counter.evt_num}")
-
-
-evt_counter.evt_num = 0
 
 
 def main():
     parser = ArgumentParser()
 
     parser.add_argument(
-        "--input_files", type=str, required=True, nargs="+", help="""Input I3 file""",
+        "--input_files",
+        type=str,
+        required=True,
+        nargs="+",
+        help="""Input I3 file""",
     )
     parser.add_argument(
-        "--output_file", type=str, default="test.i3.zst", help="""output file name""",
+        "--output_file",
+        type=str,
+        default="test.i3.zst",
+        help="""output file name""",
     )
     parser.add_argument(
         "--resource_dir",
@@ -68,22 +61,27 @@ def main():
         default=pkg_resources.resource_filename("freedom", "resources"),
     )
     parser.add_argument(
-        "--icecube_addr",
+        "--ctrl_addrs",
         type=str,
         required=True,
-        help="""IceCube LLHService ctrl addr""",
+        nargs="+",
+        help="""LLH service addrs""",
     )
     parser.add_argument(
-        "--mdom_addr", type=str, required=True, help="""mDOM LLHService ctrl addr"""
-    )
-    parser.add_argument(
-        "--degg_addr", type=str, required=True, help="""DEgg LLHService ctrl addr"""
+        "--pulse_series",
+        type=str,
+        nargs="+",
+        default=["IceCubePulsesTWSRT", "mDOMPulsesTWSRT", "DEggPulsesTWSRT"],
+        help="list of pulse series to process (order must match ctrl_addrs)",
     )
     parser.add_argument(
         "--n_frames", type=int, default=None, help="""number of frames to process"""
     )
     parser.add_argument(
-        "--gcd_file", type=str, default=None, help="""GCD file""",
+        "--gcd_file",
+        type=str,
+        default=None,
+        help="""GCD file""",
     )
 
     args = parser.parse_args()
@@ -92,8 +90,10 @@ def main():
     ug_geo = np.load(f"{args.resource_dir}/geo_array_upgrade.npy")
     mdom_directions = np.load(f"{args.resource_dir}/mdom_directions.npy")
 
-    service_addrs = [args.icecube_addr, args.mdom_addr, args.degg_addr]
-    pulse_series_names = ["IceCubePulsesTWSRT", "mDOMPulsesTWSRT", "DEggPulsesTWSRT"]
+    service_addrs = args.ctrl_addrs
+    pulse_series_names = args.pulse_series
+
+    assert len(service_addrs) == len(pulse_series_names)
 
     try:
         freedom_reco = i3freedom.I3FreeDOMClient(service_addrs, CONF_TIMEOUT_MS)
@@ -104,7 +104,7 @@ def main():
     if args.gcd_file == None:
         files = args.input_files
     else:
-        files = [args.gcd_file, args.input_files[0]]
+        files = [args.gcd_file] + args.input_files
 
     tray = I3Tray()
     tray.AddModule("I3Reader", FilenameList=files)
@@ -117,9 +117,8 @@ def main():
         mdom_directions=mdom_directions,
         par_transforms=transforms.track_frac_transforms,
         do_track_dllh=True,
-        suffix="ICU_test",
+        suffix="ICU",
     )
-    tray.AddModule(evt_counter)
     tray.AddModule(
         "I3Writer", DropOrphanStreams=[icetray.I3Frame.DAQ], filename=args.output_file
     )
