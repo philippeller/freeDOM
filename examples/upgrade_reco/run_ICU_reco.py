@@ -58,9 +58,7 @@ def start_reco_process(infile, outdir, ctrl_addrs, n_frames=None):
     outfile = f"{outdir}/{filename[:extension_ind]}_reco.i3.zst"
 
     cmd = f"./icu_reco.py --input_files {infile} --output_file {outfile}".split()
-    cmd.append("--ctrl_addrs")
-    for ctrl_addr in ctrl_addrs:
-        cmd.append(ctrl_addr)
+    cmd.extend(["--ctrl_addrs"] + ctrl_addrs)
 
     if n_frames is not None:
         cmd.extend(["--n_frames", f"{n_frames}"])
