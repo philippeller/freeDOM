@@ -1,31 +1,13 @@
 """Start or stop a service to use with the client module"""
 
-import pkg_resources
 import sys
 from argparse import ArgumentParser
 
-import zmq
-
-from freedom.reco.crs_reco import start_service, DEFAULT_SEARCH_LIMITS
-from freedom.neural_nets.transformations import prior_trafo
-
+from freedom.reco.crs_reco import start_service
+from freedom.llh_service.service_utils import kill_service
 
 ctrl_addr = "tcp://127.0.0.1:*"
 req_addr = "tcp://127.0.0.1:*"
-
-
-def kill_service(ctrl_addr):
-    with zmq.Context.instance().socket(zmq.REQ) as sock:
-        sock.setsockopt(zmq.LINGER, 0)
-        sock.setsockopt(zmq.RCVTIMEO, 1000)
-        sock.connect(ctrl_addr)
-
-        sock.send_string("die")
-
-        try:
-            print(f"service response: {sock.recv_string()}")
-        except zmq.error.Again:
-            print("No response from the LLH service")
 
 
 def build_service_conf(hitnet, chargenet):
@@ -44,8 +26,6 @@ def build_service_conf(hitnet, chargenet):
 
 
 def main():
-    resource_dir = pkg_resources.resource_filename("freedom", "resources")
-
     parser = ArgumentParser()
     parser.add_argument(
         "--hitnet",

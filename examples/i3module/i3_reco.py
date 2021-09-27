@@ -71,7 +71,7 @@ def main():
     tray.AddModule(
         freedom_reco,
         geo=geo,
-        reco_pulse_series_name="SRTTWOfflinePulsesDC",
+        reco_pulse_series_names="SRTTWOfflinePulsesDC",
         par_transforms=transforms.track_frac_transforms,
         do_track_dllh=True,
         suffix="test",

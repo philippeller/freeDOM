@@ -21,11 +21,14 @@ TRACK_M_PER_GEV = 15 / 3.3
 
 
 class I3FreeDOMClient:
-    """FreeDOM client IceTray module. Connects to a running LLHService"""
+    """FreeDOM client IceTray module. Connects to LLHServices started elsewhere"""
 
-    def __init__(self, ctrl_addr, conf_timeout, rng=None):
-        """initialize FreeDOM client, connect to LLH service"""
-        self._llh_client = LLHClient(ctrl_addr, conf_timeout)
+    def __init__(self, ctrl_addrs, conf_timeout, rng=None):
+        """initialize FreeDOM client, connect to LLH service(s)"""
+        if isinstance(ctrl_addrs, str):
+            ctrl_addrs = [ctrl_addrs]
+
+        self._llh_clients = [LLHClient(addr, conf_timeout) for addr in ctrl_addrs]
 
         if rng is None:
             self._rng = np.random.default_rng(None)
@@ -36,7 +39,9 @@ class I3FreeDOMClient:
         self,
         frame,
         geo,
-        reco_pulse_series_name,
+        reco_pulse_series_names,
+        ug_geo=None,
+        mdom_directions=None,
         suffix="",
         init_range=DEFAULT_INIT_RANGE,
         search_limits=DEFAULT_SEARCH_LIMITS,
@@ -50,11 +55,13 @@ class I3FreeDOMClient:
         **crs_fit_kwargs,
     ):
         """reconstruct an event stored in an i3frame"""
-        event = i3frame_dataloader.load_event(frame, geo, reco_pulse_series_name)
+        event = i3frame_dataloader.load_event(
+            frame, geo, reco_pulse_series_names, ug_geo, mdom_directions
+        )
 
         fit_kwargs = dict(
             event=event,
-            clients=[self._llh_client],
+            clients=self._llh_clients,
             rng=self._rng,
             init_range=init_range,
             search_limits=search_limits,
@@ -72,9 +79,11 @@ class I3FreeDOMClient:
         full_res = timed_fit(**fit_kwargs)
 
         if event["params"] is not None:
-            full_res["truth_LLH"] = self._llh_client.eval_llh(
-                event["hit_data"][0], event["evt_data"][0], event["params"]
-            )
+            full_res["truth_LLH"] = 0
+            for i, client in enumerate(self._llh_clients):
+                full_res["truth_LLH"] += client.eval_llh(
+                    event["hit_data"][i], event["evt_data"][i], event["params"]
+                )
 
         prefix = f"FreeDOM_{suffix}_"
 

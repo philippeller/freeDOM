@@ -25,6 +25,7 @@ import zmq
 from spherical_opt import spherical_opt
 
 from freedom.llh_service.llh_client import LLHClient
+from freedom.llh_service.service_utils import start_service
 from freedom.utils import i3cols_dataloader
 
 from freedom.reco import bounds
@@ -256,7 +257,6 @@ def fit_events(
     param_transforms=None,
     fixed_params=None,
     initial_points=None,
-    ICU = False,
     **sph_opt_kwargs,
 ):
     """fit a list of events
@@ -267,12 +267,10 @@ def fit_events(
 
     outputs = []
 
-    if ICU: # use this for ICU reco
-        clients = []
-        for i in range(3):
-            clients.append(LLHClient(ctrl_addr=ctrl_addrs[i], conf_timeout=conf_timeout))
-    else:
+    if isinstance(ctrl_addrs[index], str):
         clients = [LLHClient(ctrl_addr=ctrl_addrs[index], conf_timeout=conf_timeout)]
+    else:
+        clients = [LLHClient(ctrl_addr=addr, conf_timeout=conf_timeout) for addr in ctrl_addrs[index]]
     
     if np.all(seeds) == None:
         seeds = [None] * len(events)
@@ -435,29 +433,6 @@ def zero_track_fit(full_res, *fit_args, **fit_kwargs):
     E_only_res["fixed_params"] = fixed_pars
 
     return no_track_res, E_only_res
-
-
-def start_service(params, ctrl_addr, req_addr, cuda_device):
-    import os
-    import tensorflow as tf
-    from freedom.llh_service.llh_service import LLHService
-
-    # use a single GPU
-    os.environ["CUDA_VISIBLE_DEVICES"] = f"{cuda_device}"
-    gpus = tf.config.list_physical_devices("GPU")
-    for gpu in gpus:
-        tf.config.experimental.set_memory_growth(gpu, True)
-
-    params = params.copy()
-    params["ctrl_addr"] = ctrl_addr
-    params["req_addr"] = req_addr
-
-    with LLHService(**params) as serv:
-        print(
-            f"starting service work loop for cuda device {cuda_device} at ctrl_addr {serv.ctrl_addr}",
-            flush=True,
-        )
-        serv.start_work_loop()
 
 
 def adjust_addr_string(base_str, gpu_ind):
