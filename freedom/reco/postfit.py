@@ -288,8 +288,8 @@ def postfit(all_pts, par_names=PAR_NAMES, llh_cut=DELTA_LLH_CUT, aux_names=['ang
             zen_ind = par_names.index("zenith")
             az_ind = par_names.index("azimuth")
 
-            zen = all_pts[:, zen_ind]
-            az = all_pts[:, az_ind]
+            zen = cut_pts[:, zen_ind]
+            az = cut_pts[:, az_ind]
 
             p_x = np.sin(zen) * np.cos(az)
             p_y = np.sin(zen) * np.sin(az)
