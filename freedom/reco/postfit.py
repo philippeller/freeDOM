@@ -3,7 +3,6 @@ Provides "postfit" functions. Postfits analyze the minimizer samples
 to provide alternative parameter estimates and uncertainty estimates
 """
 
-__author__ = "Aaron Fienberg"
 
 import numpy as np
 from numpy.polynomial import polynomial as poly, Polynomial

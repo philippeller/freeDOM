@@ -7,8 +7,6 @@ listens for llh evaluation requests and processes them in batches
 
 from __future__ import absolute_import, division, print_function
 
-__author__ = "Aaron Fienberg"
-
 import os
 import time
 import sys

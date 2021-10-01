@@ -11,8 +11,6 @@ available.
 
 from __future__ import absolute_import, division, print_function
 
-__author__ = "Aaron Fienberg"
-
 import numpy as np
 
 import tensorflow as tf
