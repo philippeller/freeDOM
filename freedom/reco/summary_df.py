@@ -2,7 +2,6 @@
 Provides functions for converting FreeDOM fit results into pandas dataframes
 """
 
-__author__ = "Aaron Fienberg"
 
 import pandas as pd
 

@@ -4,7 +4,6 @@ Fitting functions for CRS2-based FreeDOM event reconstruction
 Also provides a main() function to drive a CRS2-based reconstruction job
 """
 
-__author__ = "Aaron Fienberg"
 
 import argparse
 import pickle

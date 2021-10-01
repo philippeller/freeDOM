@@ -3,7 +3,6 @@ Provides "prefit" functions. Prefits give initial guesses that can be used
 to seed llh optimizers and samplers
 """
 
-__author__ = "Aaron Fienberg"
 
 import numpy as np
 

@@ -6,8 +6,6 @@ cython accelerated send/recv functions for use with the LLH service and client
 """
 
 
-__author__ = "Aaron Fienberg"
-
 import numpy as np
 
 cimport numpy as np
