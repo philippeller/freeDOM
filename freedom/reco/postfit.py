@@ -157,6 +157,8 @@ def furthest_point(par, llhs, above_min=2):
         the parameter values
     llhs : np.ndarray
         the llh values
+    above_min : float (optional)
+        threshold for deltaLLH
 
     Returns
     -------
@@ -166,6 +168,38 @@ def furthest_point(par, llhs, above_min=2):
     min_par = par[np.argmin(llhs)]
     
     return np.max(np.abs(min_par - par[llhs<min_llh+above_min]))
+
+def furthest_angular_distance(az, zen, llhs, above_min=2):
+    """Estimate angular uncertainty based on simplex point furthest away from min
+
+    Parameters
+    ----------
+    az : np.ndarray
+        azimuth values
+    zen : np.ndarray
+        zenith values
+    llhs : np.ndarray
+        the llh values
+    above_min : float (optional)
+        threshold for deltaLLH
+
+    Returns
+    -------
+    float
+    """
+
+    p_x = np.sin(zen) * np.cos(az)
+    p_y = np.sin(zen) * np.sin(az)
+    p_z = np.cos(zen)
+
+    best_idx = np.argmin(llhs)
+    min_llh = llhs[best_idx]
+
+    # scalar product of the two directional vectors gives cos(opening angle)
+    cos_alpha = p_x * p_x[best_idx] + p_y * p_y[best_idx] + p_z * p_z[best_idx]
+
+    furthest_cos_alpha = np.min(cos_alpha[llhs<min_llh+above_min])
+    return np.arccos(furthest_cos_alpha)
 
 
 def env_residual_rms(env, xs, ys):
@@ -284,25 +318,9 @@ def postfit(all_pts, par_names=PAR_NAMES, llh_cut=DELTA_LLH_CUT, aux_names=['ang
 
     for name in aux_names:
         if name == 'angular_distance':
-            
-            zen_ind = par_names.index("zenith")
-            az_ind = par_names.index("azimuth")
-
-            zen = cut_pts[:, zen_ind]
-            az = cut_pts[:, az_ind]
-
-            p_x = np.sin(zen) * np.cos(az)
-            p_y = np.sin(zen) * np.sin(az)
-            p_z = np.cos(zen)
-
-            best_idx = np.argmin(cut_llhs)
-
-            # scalar product of the two directional vectors gives cos(opening angle)
-            cos_alpha = p_x * p_x[best_idx] + p_y * p_y[best_idx] + p_z * p_z[best_idx]
-
-            furthest_cos_alpha = np.min(cos_alpha)
-            furthest_points.append(np.arccos(furthest_cos_alpha))
-
+            az = cut_pts[:, par_names.index("azimuth")]
+            zen = cut_pts[:, par_names.index("zenith")]
+            furthest_points.append(furthest_angular_distance(az, zen, cut_llhs, above_min=2))
         else:
             raise ValueError("Unknown auxillary quantity `%s`"%name)
 
