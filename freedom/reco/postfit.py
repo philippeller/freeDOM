@@ -291,7 +291,7 @@ def postfit(all_pts, par_names=PAR_NAMES, llh_cut=DELTA_LLH_CUT, aux_names=['ang
     llh_cut : float, default 15
         postfit routines only consider samples within llh_cut llh of the best sample
     aux_names : list
-        any auxillary quantities to be extracted
+        any auxiliary quantities to be extracted
 
     Returns
     -------
@@ -322,7 +322,7 @@ def postfit(all_pts, par_names=PAR_NAMES, llh_cut=DELTA_LLH_CUT, aux_names=['ang
             zen = cut_pts[:, par_names.index("zenith")]
             furthest_points.append(furthest_angular_distance(az, zen, cut_llhs, above_min=2))
         else:
-            raise ValueError("Unknown auxillary quantity `%s`"%name)
+            raise ValueError("Unknown auxiliary quantity `%s`"%name)
 
     resid_rms = [env_residual_rms(env, xs, ys) for env, xs, ys in env_rets]
 
