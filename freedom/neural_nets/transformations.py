@@ -426,16 +426,14 @@ class chargenet_trafo(tf.keras.layers.Layer):
         else:
             out = tf.stack([
                      tf.math.log1p(charge[:,0])/10.0,
-                     (params[:, self.x_idx]+750)/1.576e3,
-                     (params[:, self.y_idx]+805)/1.577e3,
-                     (params[:, self.z_idx]+1115)/1.538e3,
-                     (dir_x+1)/2.,
-                     (dir_y+1)/2.,
-                     (dir_z+1)/2.,
-                     (energy+1.37)/10.6,
-                     (energy_ratio+3)/8,
-                     track_fraction,
-                     (tracky-3)/7,
+                     (params[:, self.x_idx])/8.0e2,
+                     (params[:, self.y_idx])/8.0e2,
+                     (params[:, self.z_idx]+350)/7.5e2,
+                     dir_x,
+                     dir_y,
+                     dir_z,
+                     cascade_energy/9.0,
+                     track_energy/10.0,
                     ],
                     axis=1
                     )
