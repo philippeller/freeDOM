@@ -3,7 +3,6 @@ Provides "postfit" functions. Postfits analyze the minimizer samples
 to provide alternative parameter estimates and uncertainty estimates
 """
 
-__author__ = "Aaron Fienberg"
 
 import numpy as np
 from numpy.polynomial import polynomial as poly, Polynomial
@@ -157,6 +156,8 @@ def furthest_point(par, llhs, above_min=2):
         the parameter values
     llhs : np.ndarray
         the llh values
+    above_min : float (optional)
+        threshold for deltaLLH
 
     Returns
     -------
@@ -166,6 +167,38 @@ def furthest_point(par, llhs, above_min=2):
     min_par = par[np.argmin(llhs)]
     
     return np.max(np.abs(min_par - par[llhs<min_llh+above_min]))
+
+def furthest_angular_distance(az, zen, llhs, above_min=2):
+    """Estimate angular uncertainty based on simplex point furthest away from min
+
+    Parameters
+    ----------
+    az : np.ndarray
+        azimuth values
+    zen : np.ndarray
+        zenith values
+    llhs : np.ndarray
+        the llh values
+    above_min : float (optional)
+        threshold for deltaLLH
+
+    Returns
+    -------
+    float
+    """
+
+    p_x = np.sin(zen) * np.cos(az)
+    p_y = np.sin(zen) * np.sin(az)
+    p_z = np.cos(zen)
+
+    best_idx = np.argmin(llhs)
+    min_llh = llhs[best_idx]
+
+    # scalar product of the two directional vectors gives cos(opening angle)
+    cos_alpha = p_x * p_x[best_idx] + p_y * p_y[best_idx] + p_z * p_z[best_idx]
+
+    furthest_cos_alpha = np.min(cos_alpha[llhs<min_llh+above_min])
+    return np.arccos(furthest_cos_alpha)
 
 
 def env_residual_rms(env, xs, ys):
@@ -241,7 +274,7 @@ def adjust_angle_samples(par_samps, center, angle_max=2 * np.pi):
     return par_samps
 
 
-def postfit(all_pts, par_names=PAR_NAMES, llh_cut=DELTA_LLH_CUT):
+def postfit(all_pts, par_names=PAR_NAMES, llh_cut=DELTA_LLH_CUT, aux_names=['angular_distance',]):
     """postfit routine for event reconstruction
 
     The postfit includes uncertainty estimation and alternative parameter estimators
@@ -256,6 +289,8 @@ def postfit(all_pts, par_names=PAR_NAMES, llh_cut=DELTA_LLH_CUT):
         "azimuth" and "zenith" parameters receive special treatment
     llh_cut : float, default 15
         postfit routines only consider samples within llh_cut llh of the best sample
+    aux_names : list
+        any auxiliary quantities to be extracted
 
     Returns
     -------
@@ -279,6 +314,14 @@ def postfit(all_pts, par_names=PAR_NAMES, llh_cut=DELTA_LLH_CUT):
         env_rets.append(fit_envelope(par, cut_llhs, mean, std))
         hull_areas.append(hull_area(par, cut_llhs))
         furthest_points.append(furthest_point(par, cut_llhs))
+
+    for name in aux_names:
+        if name == 'angular_distance':
+            az = cut_pts[:, par_names.index("azimuth")]
+            zen = cut_pts[:, par_names.index("zenith")]
+            furthest_points.append(furthest_angular_distance(az, zen, cut_llhs, above_min=2))
+        else:
+            raise ValueError("Unknown auxiliary quantity `%s`"%name)
 
     resid_rms = [env_residual_rms(env, xs, ys) for env, xs, ys in env_rets]
 

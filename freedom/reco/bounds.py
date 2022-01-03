@@ -2,8 +2,6 @@
 Provides functions for parameter bounds checking during LLH evaluations
 """
 
-__author__ = "Aaron Fienberg"
-
 import numpy as np
 
 NAN_REPLACE_VAL = 1e10
