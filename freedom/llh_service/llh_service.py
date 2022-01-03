@@ -22,6 +22,7 @@ import tensorflow as tf
 import tensorflow_addons as tfa
 import zmq
 
+from freedom.toy_model.NNs import charge_trafo_3D, hit_trafo_3D
 from freedom.neural_nets.transformations import chargenet_trafo, hitnet_trafo
 from freedom.neural_nets.transformations import (
     stringnet_trafo,
@@ -109,6 +110,8 @@ class LLHService:
         ndoms=None,
         features_per_dom=4,
         boundary_guard=None,
+        true_label=1.,
+        toy=False
     ):
         if (chargenet_file is None) + (stringnet_file is None) + (
             domnet_file is None
@@ -151,16 +154,27 @@ class LLHService:
             self._eval_llh = eval_llh.eval_llh
         else:
             hitnet_file = self._get_model_path(hitnet_file)
-            hitnet = tf.keras.models.load_model(
-                hitnet_file, custom_objects={"hitnet_trafo": hitnet_trafo}
-            )
-            hitnet.layers[-1].activation = tf.keras.activations.linear
+            if toy:
+                hitnet = tf.keras.models.load_model(
+                    hitnet_file, custom_objects={"hit_trafo_3D": hit_trafo_3D}
+                )
+            else:
+                hitnet = tf.keras.models.load_model(
+                    hitnet_file, custom_objects={"hitnet_trafo": hitnet_trafo}
+                )
+            if true_label == 1.:
+                hitnet.layers[-1].activation = tf.keras.activations.linear
 
             if chargenet_file is not None:
                 chargenet_file = self._get_model_path(chargenet_file)
-                chargenet = tf.keras.models.load_model(
-                    chargenet_file, custom_objects={"chargenet_trafo": chargenet_trafo}
-                )
+                if toy:
+                    chargenet = tf.keras.models.load_model(
+                        chargenet_file, custom_objects={"charge_trafo_3D": charge_trafo_3D}
+                    )
+                else:
+                    chargenet = tf.keras.models.load_model(
+                        chargenet_file, custom_objects={"chargenet_trafo": chargenet_trafo}
+                    )
                 chargenet.layers[-1].activation = tf.keras.activations.linear
 
             elif stringnet_file is not None:
@@ -222,6 +236,7 @@ class LLHService:
             tf.constant(self._stop_inds),
             self._model,
             self._boundary_guard,
+            true_label=true_label
         )
 
         # convert flush period to seconds
