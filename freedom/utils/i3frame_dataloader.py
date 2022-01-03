@@ -21,16 +21,20 @@ def _is_invisible(particle, nu_ids=[12, 14, 16]):
 def _is_muon(particle, muon_id=13):
     return abs(particle.pdg_encoding) == muon_id
 
+def _is_tau(particle, tau_id=15):
+    return abs(particle.pdg_encoding) == tau_id
+
 
 def _calc_energies(mc_primary, mc_tree):
     """returns [cascade_energy, track_energy]"""
     nu_E = mc_primary.energy
 
     track_E = max((p.energy for p in mc_tree if _is_muon(p)), default=0)
+    tau_E = max((p.energy for p in mc_tree if _is_tau(p)), default=0)
     # skip mc_tree[0] to exclude the primary from the calculation of invis_E
     invis_E = sum(p.energy for p in mc_tree[1:] if _is_invisible(p))
 
-    return [nu_E - invis_E - track_E, track_E]
+    return [nu_E - invis_E - track_E , track_E] #- 0.5*tau_E
 
 
 _param_getters = dict(

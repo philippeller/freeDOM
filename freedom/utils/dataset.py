@@ -180,15 +180,26 @@ class DataGenerator(tf.keras.utils.Sequence): # for HitNet and (total) ChargeNet
                 self.params = np.append(self.params, params, axis=0)
         
         if func == load_hits:
+            #self.data[:, 3] += -(1.-self.data[:, 5]) * 25. #
+            
+            #split hits (q=2 hit equal to 2 q=1 hits)
+            r = np.floor(self.data[:, 4]) + (self.data[:, 4] - np.floor(self.data[:, 4]) > np.random.rand(len(self.data)))
+            self.data = np.repeat(self.data, r.astype(np.int32), axis=0)
+            self.params = np.repeat(self.params, r.astype(np.int32), axis=0)
+        
             #spread absolute time values
-            time_shifts = np.clip(np.random.normal(0, 1500, len(self.data)), -5000, 5000)
-            self.data[:, 3] += time_shifts
-            self.params[:, 3] += time_shifts
+            shifts = np.clip(np.random.normal(0, 1500, len(self.data)), -5000, 5000)
+            self.data[:, 3] += shifts
+            self.params[:, 3] += shifts
+            
+            #weight/cut by number of pulses
+            #uniques, counts = np.unique(self.params[:, :3], return_counts=True, axis=0)
+            #self.weights = 10.0 / np.repeat(counts, counts)
         
         if shuffle == 'inDOM':
             self.shuffle_params_inDOM()
         else:
-            self.shuffled_params = None
+            self.shuffled_params = []
         
         self.indexes = np.arange(len(self.data))
         self.on_epoch_end()
@@ -225,6 +236,8 @@ class DataGenerator(tf.keras.utils.Sequence): # for HitNet and (total) ChargeNet
     def on_epoch_end(self):
         'Updates indexes after each epoch'
         np.random.shuffle(self.indexes) # mix between batches
+        #if len(self.shuffled_params) > 0:
+            #self.shuffle_params_inDOM()
         
     def shuffle_params_inDOM(self):
         shuffled_params = np.empty_like(self.params)
@@ -240,12 +253,12 @@ class DataGenerator(tf.keras.utils.Sequence): # for HitNet and (total) ChargeNet
         # Generate data similar to Data.get_dataset()
         x = np.take(self.data, indexes_temp, axis=0)
         t = np.take(self.params, indexes_temp, axis=0)
-        if self.shuffled_params == None:
+        if len(self.shuffled_params) == 0:
             tr = np.random.permutation(t)
         else:
             tr = np.take(self.shuffled_params, indexes_temp, axis=0)
 
-        d_true_labels = np.ones((self.batch_size, 1), dtype=x.dtype)
+        d_true_labels = np.ones((self.batch_size, 1), dtype=x.dtype) #* 0.9
         d_false_labels = np.zeros((self.batch_size, 1), dtype=x.dtype)
         
         d_X = np.append(x, x, axis=0)
