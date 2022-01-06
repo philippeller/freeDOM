@@ -11,6 +11,7 @@ def get_energies(mcprimary, mctree, mctree_idx, dtype=np.float32):
     
     neutrino_energy = mcprimary['energy']
     track_energy = np.zeros_like(neutrino_energy, dtype=dtype)
+    tau_energy = np.zeros_like(neutrino_energy, dtype=dtype)
     invisible_energy = np.zeros_like(neutrino_energy, dtype=dtype)
     
     for i in range(len(mctree_idx)):
@@ -25,6 +26,10 @@ def get_energies(mcprimary, mctree, mctree_idx, dtype=np.float32):
         if np.any(muon_mask):
             track_energy[i] = np.max(en[muon_mask])
 
+        tau_mask = np.abs(pdg) == 15
+        if np.any(tau_mask):
+            tau_energy[i] = np.max(en[tau_mask])
+            
         invisible_mask = (np.abs(pdg) == 12) | (np.abs(pdg) == 14) | (np.abs(pdg) == 16) 
         # exclude primary:
         invisible_mask[0] = False
@@ -32,7 +37,7 @@ def get_energies(mcprimary, mctree, mctree_idx, dtype=np.float32):
             # we'll make the bold assumptions that none of the neutrinos re-interact ;)
             invisible_energy[i] = np.sum(en[(invisible_mask) & (np.abs(parent)!=13)])
 
-    cascade_energy = neutrino_energy - track_energy - invisible_energy
+    cascade_energy = neutrino_energy - track_energy - invisible_energy #- 0.5*tau_energy
     return neutrino_energy, track_energy, cascade_energy
 
 def get_params(labels, mcprimary, mctree, mctree_idx, dtype=np.float32):
@@ -94,7 +99,7 @@ def load_charges(dir='/home/iwsatlas1/peller/work/oscNext/level7_v01.04/140000_i
             mcprimary = mctree['particle'][mctree['level'] == 0]
 
     # Get charge per event
-    total_charge = np.zeros((N_events, 2*len(pulses)), dtype=dtype) #4 8
+    total_charge = np.zeros((N_events, 2*len(pulses)), dtype=dtype) #3
     for j in range(len(pulses)):
         hits_idx = np.load(os.path.join(dir, pulses[j]+'/index.npy'))
         hits = np.load(os.path.join(dir, pulses[j]+'/data.npy'))
@@ -105,7 +110,7 @@ def load_charges(dir='/home/iwsatlas1/peller/work/oscNext/level7_v01.04/140000_i
 
             total_charge[i][2*j] = np.sum(this_hits['pulse']['charge'])
             total_charge[i][2*j+1] = len(np.unique(this_hits['key']))
-            #total_charge[i][2] = len(np.unique(this_hits['key']['string']*113 + this_hits['key']['om']))
+            #total_charge[i][2*j+2] = len(np.unique(this_hits['key']['string']))
             
     if not data:
         params = get_params(labels, mcprimary, mctree, mctree_idx)
@@ -320,7 +325,7 @@ def load_hits(dir='/home/iwsatlas1/peller/work/oscNext/level7_v01.04/140000_i3co
     if 'mDOM' in pulses:
         pmt_dirs = np.load(pkg_resources.resource_filename('freedom', 'resources/mdom_directions.npy'))
     elif 'DEgg' in pulses:
-        pmt_dirs =np.array([[0, np.pi], [np.pi, np.pi]]) #[zen, azi], zen: 0=down
+        pmt_dirs = np.array([[0, np.pi], [np.pi, np.pi]]) #[zen, azi], zen: 0=down
     else:
         pmt_dirs = np.array([[0, np.pi]])
     

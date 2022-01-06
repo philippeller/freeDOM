@@ -5,7 +5,7 @@ import tensorflow as tf
 
 @tf.function
 def freedom_nllh(
-    hit_data, evt_data, theta, stop_inds, models, boundary_guard, charge_ind=4
+    hit_data, evt_data, theta, stop_inds, models, boundary_guard, charge_ind=4, true_label=1.
 ):
     """
     hitnet/chargenet llh calculation
@@ -48,7 +48,12 @@ def freedom_nllh(
         charge_llhs = tf.zeros((theta.shape[0]), tf.float32)
 
     # hit net calculation
-    hit_llhs = -1 * hitnet([hit_data, dense_theta])
+    if true_label == 1.:
+        hit_llhs = -1 * hitnet([hit_data, dense_theta])
+    else:
+        y = hitnet([hit_data, dense_theta])
+        y = tf.clip_by_value(y, 0, true_label-1e-7)
+        hit_llhs = -tf.math.log(y/(true_label-y))
     hit_llh_splits = tf.split(hit_llhs, n_obs)
     charge_splits = tf.split(hit_data[:, charge_ind], n_obs)
     hit_llh_sums = tf.stack(
@@ -63,7 +68,7 @@ def freedom_nllh(
 
     if boundary_guard is not None:
         # time residual prior
-        time_res_prior = boundary_guard["Tprior"]  # boundary_guard.pop('Tprior', None)
+        time_res_prior = boundary_guard["Tprior"]
         if time_res_prior is not None:
             tresiduals = hitnet.layers[2].TimeResidual(hit_data, dense_theta)
             log_p_tres = tf.math.log(

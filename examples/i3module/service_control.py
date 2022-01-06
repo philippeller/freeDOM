@@ -30,13 +30,13 @@ def main():
     parser.add_argument(
         "--hitnet",
         type=str,
-        default="/cvmfs/icecube.opensciencegrid.org/users/peller/freeDOM/resources/HitNet_ranger_06_Sep_2021-18h50/epoch_25_model.hdf5",
+        default="/cvmfs/icecube.opensciencegrid.org/users/peller/freeDOM/resources/HitNet_ranger_08_Dec_2021-10h53/epoch_50_model.hdf5",
         help="""hitnet file path""",
     )
     parser.add_argument(
         "--chargenet",
         type=str,
-        default="/cvmfs/icecube.opensciencegrid.org/users/peller/freeDOM/resources/ChargeNet_ranger_23_Aug_2021-18h42/epoch_1500_model.hdf5",
+        default="/cvmfs/icecube.opensciencegrid.org/users/peller/freeDOM/resources/ChargeNet_ranger_23_Nov_2021-13h51/epoch_2000_model.hdf5",
         help="""chargenet file path""",
     )
     parser.add_argument(

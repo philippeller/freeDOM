@@ -75,6 +75,8 @@ def main():
         par_transforms=transforms.track_frac_transforms,
         do_track_dllh=True,
         suffix="test",
+        n_live_points=97,
+        batch_size=12,
     )
     tray.AddModule(evt_counter)
     tray.AddModule(

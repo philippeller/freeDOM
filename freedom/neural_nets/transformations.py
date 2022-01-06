@@ -35,109 +35,10 @@ class hitnet_trafo(tf.keras.layers.Layer):
         self.z_idx = labels.index('z')
         self.cascade_energy_idx = labels.index('cascade_energy')
         self.track_energy_idx = labels.index('track_energy')
-        
-        
-        #self.e_cscd_bias = self.add_weight(shape=(1,), initializer="zeros", trainable=True)
-        #self.e_cscd_scale = self.add_weight(shape=(1,), initializer="zeros", trainable=True)
-        #loc_x_bias
-        
+
 
     def get_config(self):
         return {'labels': self.labels, 'max_energy': self.min_energy, 'max_energy': self.max_energy}
-
-
-    def TimeResidual(self, hits, params, Index=1.33):
-        '''
-        Calculates the difference between the earliest possible arrival time and the measured time of a photon
-
-        Parameters:
-        -----------
-
-        hits : tensor
-            shape (N, 4+), containing hit DOM position x, y, z and hit time
-
-        params : tensor
-            shape (N, len(labels))
-
-        '''
-        hitpos = hits[:,:3]
-        T_exp = self.CherenkovTime(params, hitpos, Index)
-        T_meas = hits[:,3] - params[:, self.time_idx]
-        return T_meas - T_exp
-
-    def CherenkovTime(self, params, position, Index=1.33):
-        '''
-        The earliest possible arrival time of a Cherenkov photon at the given position.
-        Assumes neutrino interaction with given params.
-
-        Parameters:
-        -----------
-
-        params : tensor
-            shape (N, len(labels))
-        
-        position : tensor
-            shape (N, 3), containing hit DOM position x, y, z
-
-        '''
-        changle = tf.math.acos(1/Index)
-        length = tf.clip_by_value(params[:, self.track_energy_idx], self.min_energy, self.max_energy) * 5 #m
-        Length = tf.stack([length, length, length], axis=1)
-
-        # closest point on (inf) track, dist, dist along track and direction
-        appos, apdist, s, Dir = self.ClosestApproachCalc(params, position)
-        a = s - apdist/tf.math.tan(changle) #photon emission distance along track
-
-        return tf.where(a <= 0.,
-                        tf.norm(position-params[:,:3], axis=1) * Index/self.speed_of_light,
-                        tf.where(a <= length,
-                                 (a + apdist/tf.math.sin(changle)*Index) / self.speed_of_light,
-                                 (length + tf.norm(position-(params[:,:3] + Length*Dir), axis=1)*Index) / self.speed_of_light
-                                )
-                       )
-
-    def ClosestApproachCalc(self, params, position):
-        '''
-        Calculates the closest point to the given position on an infinite track
-        with direction specified in given params, the distance of this point and
-        the given position as well as the distance of this point along the track.
-        Also returns track direction vector of length 1
-
-        Parameters:
-        -----------
-
-        params : tensor
-            shape (N, len(labels))
-
-        position : tensor
-            shape (N, 3), containing hit DOM position x, y, z
-
-        '''
-        theta  = params[:, self.zenith_idx]
-        phi    = params[:, self.azimuth_idx]
-        pos0_x = params[:, self.x_idx]
-        pos0_y = params[:, self.y_idx]
-        pos0_z = params[:, self.z_idx]
-
-        e_x = -tf.math.sin(theta)*tf.math.cos(phi)
-        e_y = -tf.math.sin(theta)*tf.math.sin(phi)
-        e_z = -tf.math.cos(theta)
-
-        h_x = position[:,0] - pos0_x
-        h_y = position[:,1] - pos0_y
-        h_z = position[:,2] - pos0_z
-
-        s = e_x*h_x + e_y*h_y + e_z*h_z
-
-        pos2_x = pos0_x + s*e_x
-        pos2_y = pos0_y + s*e_y
-        pos2_z = pos0_z + s*e_z
-
-        appos = tf.stack([pos2_x, pos2_y, pos2_z], axis=1)
-        apdist = tf.norm(position-appos, axis=1)
-        Dir = tf.stack([e_x, e_y, e_z], axis=1)
-
-        return appos, apdist, s, Dir
 
 
     def call(self, hit, params):
@@ -154,8 +55,8 @@ class hitnet_trafo(tf.keras.layers.Layer):
         '''
         cosphi = tf.math.cos(params[:, self.azimuth_idx])
         sinphi = tf.math.sin(params[:, self.azimuth_idx])
-        
         sintheta = tf.math.sin(params[:, self.zenith_idx])
+        
         dir_x = sintheta * cosphi
         dir_y = sintheta * sinphi
         dir_z = tf.math.cos(params[:, self.zenith_idx])
@@ -165,67 +66,49 @@ class hitnet_trafo(tf.keras.layers.Layer):
         dz = params[:, self.z_idx] - hit[:,2]
         
         # distance DOM - vertex
-        rho = tf.math.sqrt(tf.math.square(dx) + tf.math.square(dy))
         dist = tf.math.sqrt(tf.math.square(dx) + tf.math.square(dy) + tf.math.square(dz))     
-        
-        absdeltaphidir = -tf.math.divide_no_nan((cosphi*dx + sinphi*dy), rho)
 
-        costhetadir = tf.clip_by_value(tf.math.divide_no_nan(rho, dist), 0, 1) # can produce NaN on CPU without clip
-        sinthetadir = tf.sqrt(1 - tf.math.square(costhetadir))
-        # so it is 0 at the poles?
-        absdeltaphidir *= sintheta * sinthetadir
-        
         dt = hit[:, 3] - params[:, self.time_idx]
-        ## difference c*t - r
         delta = dt * self.speed_of_light - dist
-        tres = self.TimeResidual(hit, params)
 
-        #cascade_energy = tf.math.log(tf.clip_by_value(params[:, self.cascade_energy_idx], self.min_energy, self.max_energy))
-        track_energy = tf.math.log(tf.clip_by_value(params[:, self.track_energy_idx], self.min_energy, self.max_energy))
-        energy = params[:, self.cascade_energy_idx] + params[:, self.track_energy_idx]
-        track_fraction = params[:, self.track_energy_idx] / energy
+        cascade_energy = tf.math.log1p(params[:, self.cascade_energy_idx])
+        track_energy = tf.math.log1p(params[:, self.track_energy_idx])
         
         pmt_x = tf.math.sin(hit[:,7]) * tf.math.cos(hit[:,8])
         pmt_y = tf.math.sin(hit[:,7]) * tf.math.sin(hit[:,8])
         pmt_z = tf.math.cos(hit[:,7])
+        
+        dx = dx/dist
+        dy = dy/dist
+        dz = dz/dist
 
-        cos_pmtd = tf.clip_by_value((pmt_x*dx + pmt_y*dy + pmt_z*dz)/(dist), -1, 1) # pmt looks to event?
-        cos_dird = tf.clip_by_value((dir_x*dx + dir_y*dy + dir_z*dz)/(dist), -1, 1) # event flies to pmt?
-
-        delta = tres - delta #
-        delta = tf.where(delta<0, -tf.math.log1p(-delta), tf.math.log1p(delta))
-        tres = tf.where(tres<0, -tf.math.log1p(-tres), tf.math.log1p(tres))
         dist = tf.math.log1p(dist)
-        rho = tf.math.log1p(rho)
-        #dt = tf.where(dt<0, -tf.math.log1p(-dt), tf.math.log1p(dt)) #dt/1000.
+        delta = tf.where(delta<0, -tf.math.log1p(-delta), tf.math.log1p(delta))
 
-        out = [tres,
-               dist,
-               rho,
-               tf.math.acos(costhetadir),
-               absdeltaphidir/3.128253,
+        out = [dist/7.5,
                dir_x,
                dir_y,
                dir_z,
-               dx/1000.,
-               dy/1000.,
-               dz/1000.,
-               #dt,
-               delta,
+               dx,
+               dy,
+               dz,
+               delta/8.0,
+               cascade_energy/9.0,
+               track_energy/10.0,
+               pmt_x,
+               pmt_y,
+               pmt_z,
                (hit[:,0]+5.71e+02)/1.15e+03,
                (hit[:,1]+5.21e+02)/1.04e+03,
                (hit[:,2]+5.13e+02)/1.04e+03,
                (hit[:,3]-5.72e+03)/1.99e+04,
-               #hit[:,5],
-               tf.math.acos(cos_pmtd),
-               tf.math.acos(cos_dird),
-               track_fraction,
-               #tf.math.log1p(params[:, self.track_energy_idx])
+               hit[:,5]
               ]
         
         out = tf.stack(out, axis=1)
 
         return out
+
 
 class domnet_trafo(tf.keras.layers.Layer):
     '''Class to transfor inputs for domnet
@@ -502,9 +385,6 @@ class chargenet_trafo(tf.keras.layers.Layer):
         self.cascade_energy_idx = labels.index('cascade_energy')
         self.track_energy_idx = labels.index('track_energy')
         
-        self.det_x = [31.25, 72.37, 41.6, 106.94, 113.19, 57.2, -9.68, -10.97]
-        self.det_y = [-72.93, -66.6, 35.49, 27.09, -60.47, -105.52, -79.5, 6.72]
-        
     def get_config(self):
         return {'labels': self.labels, 'max_energy': self.min_energy, 'max_energy': self.max_energy, 'use_nCh': self.use_nCh}
     
@@ -525,72 +405,35 @@ class chargenet_trafo(tf.keras.layers.Layer):
         dir_y = tf.math.sin(params[:, self.zenith_idx]) * tf.math.sin(params[:, self.azimuth_idx])
         dir_z = tf.math.cos(params[:, self.zenith_idx])
         
-        #cascade_energy = tf.math.log(tf.clip_by_value(params[:, self.cascade_energy_idx], self.min_energy, self.max_energy))
-        #track_energy = tf.math.log(tf.clip_by_value(params[:, self.track_energy_idx], self.min_energy, self.max_energy))
-        energy = params[:, self.cascade_energy_idx] + params[:, self.track_energy_idx]
-        energy_ratio = params[:, self.track_energy_idx] / params[:, self.cascade_energy_idx]
-        track_fraction = params[:, self.track_energy_idx] / energy 
-        energy = tf.math.log(tf.clip_by_value(energy, self.min_energy, self.max_energy))
-        energy_ratio = tf.clip_by_value(tf.math.log(energy_ratio), -3, 5)
-        
-        tracky = tf.clip_by_value(params[:, self.track_energy_idx], 3, 10)
-        '''
-        x_dists = tf.repeat(params[:, self.x_idx], len(self.det_x)) - tf.tile(self.det_x, [len(params[:, self.x_idx])])
-        y_dists = tf.repeat(params[:, self.y_idx], len(self.det_y)) - tf.tile(self.det_y, [len(params[:, self.y_idx])])
-        sd = 1/(x_dists**2 + y_dists**2 + 1)
-        log_mean_dist = tf.math.log(tf.math.reduce_mean(tf.reshape(sd, (len(params[:, self.x_idx]), len(self.det_x))), axis=1))
-        mean_log_dist = tf.math.reduce_mean(tf.reshape(tf.math.log(sd), (len(params[:, self.x_idx]), len(self.det_x))), axis=1)
-        
-        ds = tf.math.sqrt(x_dists**2 + y_dists**2)
-        dir_len = tf.clip_by_value(tf.repeat(tf.math.sqrt(dir_x**2 + dir_y**2), len(self.det_x)), 0.01, 1)
-        dird = (tf.repeat(dir_x, len(self.det_x))*x_dists + tf.repeat(dir_y, len(self.det_y))*y_dists)/(ds*dir_len)
-        sdw = (tf.clip_by_value(dird, -1, 1)+1.01) * dir_len * sd
-        log_mean_dist_w = tf.math.log(tf.math.reduce_mean(tf.reshape(sdw, (len(params[:, self.x_idx]), len(self.det_x))), axis=1))
-        mean_log_dist_w = tf.math.reduce_mean(tf.reshape(tf.math.log(sdw), (len(params[:, self.x_idx]), len(self.det_x))), axis=1)
-        '''
+        cascade_energy = tf.math.log1p(params[:, self.cascade_energy_idx])
+        track_energy = tf.math.log1p(params[:, self.track_energy_idx])
+
         if self.use_nCh:
             out = tf.stack([
-                     #charge[:,0]/2.0e4,
-                     #charge[:,1]/5.41e2,
                      tf.math.log1p(charge[:,0])/10.0,
                      tf.math.log1p(charge[:,1])/6.0, #n_channels
-                     #charge[:,2]/44.0, #n_strings
-                     (params[:, self.x_idx]+750)/1.576e3,
-                     (params[:, self.y_idx]+805)/1.577e3,
-                     (params[:, self.z_idx]+1115)/1.538e3,
-                     (dir_x+1)/2.,
-                     (dir_y+1)/2.,
-                     (dir_z+1)/2.,
-                     #(cascade_energy+2.2)/11.44,
-                     #(track_energy+2.3)/11.49,
-                     (energy+1.37)/10.6,
-                     (energy_ratio+3)/8,
-                     track_fraction,
-                     (tracky-3)/7,
-                     #(log_mean_dist+13.34)/11.26,
-                     #(mean_log_dist+13.35)/5.95,
-                     #(log_mean_dist_w+18.63)/17.25,
-                     #(mean_log_dist_w+18.98)/11.7,
+                     (params[:, self.x_idx])/8.0e2,
+                     (params[:, self.y_idx])/8.0e2,
+                     (params[:, self.z_idx]+350)/7.5e2,
+                     dir_x,
+                     dir_y,
+                     dir_z,
+                     cascade_energy/9.0,
+                     track_energy/10.0,
                     ],
                     axis=1
                     )
         else:
             out = tf.stack([
                      tf.math.log1p(charge[:,0])/10.0,
-                     (params[:, self.x_idx]+750)/1.576e3,
-                     (params[:, self.y_idx]+805)/1.577e3,
-                     (params[:, self.z_idx]+1115)/1.538e3,
-                     (dir_x+1)/2.,
-                     (dir_y+1)/2.,
-                     (dir_z+1)/2.,
-                     (energy+1.37)/10.6,
-                     (energy_ratio+3)/8,
-                     track_fraction,
-                     (tracky-3)/7,
-                     #(log_mean_dist+13.34)/11.26,
-                     #(mean_log_dist+13.35)/5.95,
-                     #(log_mean_dist_w+18.63)/17.25,
-                     #(mean_log_dist_w+18.98)/11.7,
+                     (params[:, self.x_idx])/8.0e2,
+                     (params[:, self.y_idx])/8.0e2,
+                     (params[:, self.z_idx]+350)/7.5e2,
+                     dir_x,
+                     dir_y,
+                     dir_z,
+                     cascade_energy/9.0,
+                     track_energy/10.0,
                     ],
                     axis=1
                     )
