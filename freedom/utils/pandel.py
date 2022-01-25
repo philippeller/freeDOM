@@ -1,4 +1,5 @@
 from scipy.stats import rv_continuous
+from scipy.stats._distn_infrastructure import rv_frozen
 from scipy.special import  gammainc, gammaincinv, gamma, gammaln
 import numpy as np
 
@@ -34,7 +35,7 @@ class pandel_gen(rv_continuous):
     def _pdf(self, t, d):
         alpha = d/self.lambda_s
         x = t*self.lb
-        return self.lb/gamma(alpha) * x ** (alpha-1) * np.exp(-x)
+        return self.lb/gamma(alpha) * np.power(x, alpha-1) * np.exp(-x)
     
     def _logpdf(self, t, d):
         alpha = d/self.lambda_s
@@ -48,6 +49,16 @@ class pandel_gen(rv_continuous):
     def _ppf(self, q, d):
         alpha = d/self.lambda_s
         return gammaincinv(alpha, q)/self.lb
-
+    
+    def freeze(self, *args, **kwds):
+        frozen = rv_frozen(self, *args, **kwds)
+        frozen.dist.tau = self.tau
+        frozen.dist.lambda_s = self.lambda_s
+        frozen.dist.lambda_a = self.lambda_a
+        frozen.dist.v = self.v
+        frozen.dist.lam = self.lam
+        frozen.dist.beta = self.beta
+        frozen.dist.lb = self.lb
+        return frozen
     
 pandel = pandel_gen(a=0.0, name='pandel')
