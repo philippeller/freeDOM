@@ -1,4 +1,5 @@
 from scipy.stats import rv_continuous
+from scipy.stats._distn_infrastructure import rv_frozen
 from scipy.special import  gammainc, gammaincinv, gamma, gammaln
 import numpy as np
 
@@ -14,7 +15,7 @@ class pandel_gen(rv_continuous):
     Instantiation parameters (optional):
     ------------------------------------
 
-    tau : tau parameter (time
+    tau : tau parameter (time)
     lambda_s : scattering length (length)
     lambda_a : absorption length (length)
     v : velocity (length/time)
