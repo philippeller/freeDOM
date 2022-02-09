@@ -1,12 +1,12 @@
 from __future__ import absolute_import, division, print_function
 
-__author__ = "Aaron Fienberg"
-
 import tensorflow as tf
 
 
 @tf.function
-def freedom_nllh(hit_data, evt_data, theta, stop_inds, models, charge_ind=4):
+def freedom_nllh(
+    hit_data, evt_data, theta, stop_inds, models, boundary_guard, charge_ind=4, true_label=1.
+):
     """
     hitnet/chargenet llh calculation
 
@@ -22,8 +22,9 @@ def freedom_nllh(hit_data, evt_data, theta, stop_inds, models, charge_ind=4):
         last index of each separate event in the hit_data table
     models: tuple or list or other indexable object
         (hitnet, chargenet)
+    boundary_guard: dict
+        boundary guard dict containing the keys "model", "param_limits", "bg_lim", "invalid_llh", "prior" and "Tprior"
     """
-
     hitnet = models[0]
     chargenet = models[1]
 
@@ -41,10 +42,18 @@ def freedom_nllh(hit_data, evt_data, theta, stop_inds, models, charge_ind=4):
     dense_theta = tf.repeat(theta, n_obs, axis=0)
 
     # charge net calculation
-    charge_llhs = -1 * chargenet([evt_data, theta])[:, -1]
+    if chargenet is not None:
+        charge_llhs = -1 * chargenet([evt_data, theta])[:, -1]
+    else:
+        charge_llhs = tf.zeros((theta.shape[0]), tf.float32)
 
     # hit net calculation
-    hit_llhs = -1 * hitnet([hit_data, dense_theta])
+    if true_label == 1.:
+        hit_llhs = -1 * hitnet([hit_data, dense_theta])
+    else:
+        y = hitnet([hit_data, dense_theta])
+        y = tf.clip_by_value(y, 0, true_label-1e-7)
+        hit_llhs = -tf.math.log(y/(true_label-y))
     hit_llh_splits = tf.split(hit_llhs, n_obs)
     charge_splits = tf.split(hit_data[:, charge_ind], n_obs)
     hit_llh_sums = tf.stack(
@@ -55,7 +64,69 @@ def freedom_nllh(hit_data, evt_data, theta, stop_inds, models, charge_ind=4):
     )
 
     # combine hitnet and chargenet
-    return hit_llh_sums[:, 0, 0] + charge_llhs
+    base_llhs = hit_llh_sums[:, 0, 0] + charge_llhs
+
+    if boundary_guard is not None:
+        # time residual prior
+        time_res_prior = boundary_guard["Tprior"]
+        if time_res_prior is not None:
+            tresiduals = hitnet.layers[2].TimeResidual(hit_data, dense_theta)
+            log_p_tres = tf.math.log(
+                tf.clip_by_value(
+                    tf.py_function(time_res_prior, [tresiduals], tf.float32), 1e-10, 1
+                )
+            )
+            log_p_tres_splits = tf.split(
+                tf.reshape(log_p_tres, tf.shape(hit_llhs)), n_obs
+            )
+            log_p_tres_sums = tf.stack(
+                [
+                    tf.matmul(log_p_tres, charge_split[:, tf.newaxis], transpose_a=True)
+                    for log_p_tres, charge_split in zip(
+                        log_p_tres_splits, charge_splits
+                    )
+                ]
+            )
+
+            base_llhs -= log_p_tres_sums[:, 0, 0]
+
+        return apply_boundary_guard(base_llhs, theta, **boundary_guard)
+    else:
+        return base_llhs
+
+
+@tf.function
+def apply_boundary_guard(
+    base_llhs, theta, model, param_limits, bg_lim, invalid_llh, prior, Tprior
+):
+    """
+    apply the boundary guard
+
+    Parameters
+    ----------
+    base_llhs: tf.constant
+        pre boundary guard llhs
+    theta: tf.keras
+        parameters at which to evaluate the boundary guard
+    model: tf.keras.Model
+        the boundary guard model
+    param_limits: tf.constant
+        parameter limits to normalize boundary guard input (make sure you use the same as in training!)
+    bg_lim: tf.constant
+        boundary guard limit
+    invalid_llh: tf.constant
+        value returned at points where model(param) <= bg_lim
+    prior: tf.constant
+        should boundary guard also be used as bayesian prior (otherwise just hard limit)
+
+    """
+    scales = param_limits[1] - param_limits[0]
+
+    bg_vals = model((theta - param_limits[0]) / scales)[:, 0]
+
+    return tf.where(
+        bg_vals <= bg_lim, invalid_llh, base_llhs - bg_vals * tf.cast(prior, tf.float32)
+    )
 
 
 def wrap_partial_chargenet(partialnet, n_params, n_groups, features_per_group):

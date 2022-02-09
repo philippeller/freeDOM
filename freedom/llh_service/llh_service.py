@@ -7,21 +7,20 @@ listens for llh evaluation requests and processes them in batches
 
 from __future__ import absolute_import, division, print_function
 
-__author__ = "Aaron Fienberg"
-
-import json
 import os
 import time
 import sys
 import pkg_resources
 
 import numpy as np
+from scipy.interpolate import UnivariateSpline
+import pickle
 
-# import numba
 import tensorflow as tf
 import tensorflow_addons as tfa
 import zmq
 
+from freedom.toy_model.NNs import charge_trafo_3D, hit_trafo_3D
 from freedom.neural_nets.transformations import chargenet_trafo, hitnet_trafo
 from freedom.neural_nets.transformations import (
     stringnet_trafo,
@@ -77,6 +76,7 @@ class LLHService:
         "_ctrl_sock",
         "_last_flush",
         "_client_conf",
+        "_boundary_guard",
     ]
 
     def __init__(
@@ -107,12 +107,15 @@ class LLHService:
         features_per_layer=4,
         ndoms=None,
         features_per_dom=4,
+        boundary_guard=None,
+        true_label=1.,
+        toy=False
     ):
         if (chargenet_file is None) + (stringnet_file is None) + (
             domnet_file is None
-        ) + (layernet_file is None) != 3:
+        ) + (layernet_file is None) < 3:
             raise RuntimeError(
-                "You must select exactly one of chargenet, stringnet, layernet, or domnet."
+                "You must select no more than one of chargenet, stringnet, layernet, or domnet."
             )
 
         self._work_reqs = []
@@ -120,7 +123,6 @@ class LLHService:
         self._n_table_rows = batch_size["n_observations"]
 
         self._n_hypos = batch_size["n_hypos"]
-        """number of hypotheses per batch"""
 
         self._n_hit_features = n_hit_features
         self._n_evt_features = n_evt_features
@@ -150,16 +152,27 @@ class LLHService:
             self._eval_llh = eval_llh.eval_llh
         else:
             hitnet_file = self._get_model_path(hitnet_file)
-            hitnet = tf.keras.models.load_model(
-                hitnet_file, custom_objects={"hitnet_trafo": hitnet_trafo}
-            )
-            hitnet.layers[-1].activation = tf.keras.activations.linear
+            if toy:
+                hitnet = tf.keras.models.load_model(
+                    hitnet_file, custom_objects={"hit_trafo_3D": hit_trafo_3D}
+                )
+            else:
+                hitnet = tf.keras.models.load_model(
+                    hitnet_file, custom_objects={"hitnet_trafo": hitnet_trafo}
+                )
+            if true_label == 1.:
+                hitnet.layers[-1].activation = tf.keras.activations.linear
 
             if chargenet_file is not None:
                 chargenet_file = self._get_model_path(chargenet_file)
-                chargenet = tf.keras.models.load_model(
-                    chargenet_file, custom_objects={"chargenet_trafo": chargenet_trafo}
-                )
+                if toy:
+                    chargenet = tf.keras.models.load_model(
+                        chargenet_file, custom_objects={"charge_trafo_3D": charge_trafo_3D}
+                    )
+                else:
+                    chargenet = tf.keras.models.load_model(
+                        chargenet_file, custom_objects={"chargenet_trafo": chargenet_trafo}
+                    )
                 chargenet.layers[-1].activation = tf.keras.activations.linear
 
             elif stringnet_file is not None:
@@ -186,7 +199,7 @@ class LLHService:
 
             elif domnet_file is not None:
                 if ndoms is None:
-                    raise ValueError(f"ndoms must be specified when using domnet!")
+                    raise ValueError("ndoms must be specified when using domnet!")
 
                 domnet_file = self._get_model_path(domnet_file)
                 domnet = tf.keras.models.load_model(
@@ -198,12 +211,20 @@ class LLHService:
                     domnet, n_hypo_params, ndoms, features_per_dom
                 )
 
+            else:
+                chargenet = None
+
             self._model = (hitnet, chargenet)
 
             self._eval_llh = eval_llh.freedom_nllh
 
         if bypass_tensorflow:
             self._eval_llh = fake_eval_llh
+
+        if boundary_guard is not None:
+            self._boundary_guard = self.init_boundary_guard(**boundary_guard)
+        else:
+            self._boundary_guard = None
 
         # trace-compile the llh function in advance
         self._eval_llh(
@@ -212,6 +233,8 @@ class LLHService:
             tf.constant(self._theta_table),
             tf.constant(self._stop_inds),
             self._model,
+            self._boundary_guard,
+            true_label=true_label
         )
 
         # convert flush period to seconds
@@ -238,7 +261,7 @@ class LLHService:
             n_hypo_params=n_hypo_params,
             n_hit_features=n_hit_features,
             n_evt_features=n_evt_features,
-            req_addr=req_addr,
+            req_addr=self._req_sock.getsockopt(zmq.LAST_ENDPOINT).decode(),
         )
 
         # # jit compile self._fill_tables
@@ -279,6 +302,10 @@ class LLHService:
 
             if time.time() - self._last_flush > flush_period:
                 self._flush()
+
+    @property
+    def ctrl_addr(self):
+        return self._ctrl_sock.getsockopt(zmq.LAST_ENDPOINT).decode()
 
     def _init_sockets(self, req_addr, ctrl_addr, send_hwm, recv_hwm, router_mandatory):
         # pylint: disable=no-member
@@ -353,7 +380,6 @@ class LLHService:
             stop_hypo_ind,
             header_frames,
         )
-        # self._numba_record_req(x, thetas, next_ind, hypo_ind, header_frames)
 
     # @profile
     def _record_req(
@@ -375,11 +401,14 @@ class LLHService:
         self._evt_data_table[hypo_ind:stop_hypo_ind] = evt_data
         self._theta_table[hypo_ind:stop_hypo_ind] = thetas
 
-        # update stop indices
-        next_stop = next_ind + n_hits
-        self._stop_inds[hypo_ind : hypo_ind + batch_size] = np.arange(
-            next_stop, next_stop + n_hits * batch_size, n_hits
-        )
+        # update stop indices, handle special case of 0 hits
+        if n_hits > 0:
+            next_stop = next_ind + n_hits
+            self._stop_inds[hypo_ind : hypo_ind + batch_size] = np.arange(
+                next_stop, next_stop + n_hits * batch_size, n_hits
+            )
+        else:
+            self._stop_inds[hypo_ind : hypo_ind + batch_size] = next_ind
 
         # record work request information
         work_item_dict = dict(
@@ -389,49 +418,6 @@ class LLHService:
         self._work_reqs.append(work_item_dict)
         self._next_table_ind = stop_ind
         self._next_hypo_ind = stop_hypo_ind
-
-    #     # @profile
-    #     def _numba_record_req(self, x, thetas, next_ind, hypo_ind, header_frames):
-    #         self._fill_tables(
-    #             self._hit_table,
-    #             self._theta_table,
-    #             self._stop_inds,
-    #             x,
-    #             thetas,
-    #             next_ind,
-    #             hypo_ind,
-    #         )
-
-    #         stop_hypo_ind = hypo_ind + len(thetas)
-
-    #         # record work request information
-    #         work_item_dict = dict(
-    #             header_frames=header_frames, start_ind=hypo_ind, stop_ind=stop_hypo_ind,
-    #         )
-    #         self._work_reqs.append(work_item_dict)
-    #         self._next_table_ind = next_ind + len(x) * len(thetas)
-    #         self._next_hypo_ind = stop_hypo_ind
-
-    #     @staticmethod
-    #     @numba.njit
-    #     def _fill_tables(x_table, theta_table, stop_inds, x, thetas, next_ind, hypo_ind):
-
-    #         batch_size = len(thetas)
-    #         n_obs = len(x)
-
-    #         # fill table with observations and hypothesis parameters
-    #         for i in range(batch_size):
-    #             start = next_ind + i * n_obs
-    #             stop = start + n_obs
-    #             x_table[start:stop] = x
-
-    #         theta_table[hypo_ind : hypo_ind + batch_size] = thetas
-
-    #         # update stop indices
-    #         next_stop = next_ind + n_obs
-    #         stop_inds[hypo_ind : hypo_ind + batch_size] = np.arange(
-    #             next_stop, next_stop + n_obs * batch_size, n_obs
-    #         )
 
     # @profile
     def _process_reqs(self):
@@ -488,7 +474,12 @@ class LLHService:
             theta_table = tf.constant(self._theta_table)
             stop_inds = tf.constant(self._stop_inds)
             llh_sums = self._eval_llh(
-                hit_data_table, evt_data_table, theta_table, stop_inds, self._model
+                hit_data_table,
+                evt_data_table,
+                theta_table,
+                stop_inds,
+                self._model,
+                self._boundary_guard,
             )
             llhs = llh_sums.numpy()
 
@@ -513,3 +504,36 @@ class LLHService:
             filename = f"{pkg_resources.resource_filename('freedom', 'resources/models')}/{filename}"
 
         return filename
+
+    @staticmethod
+    def init_boundary_guard(
+        file,
+        param_limits,
+        bg_lim,
+        invalid_llh,
+        prior=False,
+        Tprior=None,
+        custom_objects=None,
+    ):
+        if custom_objects == None:
+            model = tf.keras.models.load_model(file)
+        else:
+            model = tf.keras.models.load_model(file, custom_objects=custom_objects)
+        param_limits = tf.constant(param_limits, tf.float32)
+        bg_lim = tf.constant(bg_lim, tf.float32)
+        invalid_llh = tf.constant(invalid_llh, tf.float32)
+        prior = tf.constant(prior, tf.bool)
+        if Tprior is not None:
+            with open(Tprior, "rb") as F:
+                Tprior = pickle.load(F)
+            Tprior = UnivariateSpline._from_tck(Tprior)
+            Tprior.ext = 1
+
+        return dict(
+            model=model,
+            param_limits=param_limits,
+            bg_lim=bg_lim,
+            invalid_llh=invalid_llh,
+            prior=prior,
+            Tprior=Tprior,
+        )

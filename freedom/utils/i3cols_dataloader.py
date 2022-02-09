@@ -4,12 +4,14 @@ i3cols is available here: https://github.com/jllanfranchi/i3cols
 import os
 import pkg_resources
 import numpy as np
+from scipy.stats import iqr
 
 def get_energies(mcprimary, mctree, mctree_idx, dtype=np.float32):
     '''Get energies per event'''
     
     neutrino_energy = mcprimary['energy']
     track_energy = np.zeros_like(neutrino_energy, dtype=dtype)
+    tau_energy = np.zeros_like(neutrino_energy, dtype=dtype)
     invisible_energy = np.zeros_like(neutrino_energy, dtype=dtype)
     
     for i in range(len(mctree_idx)):
@@ -17,19 +19,25 @@ def get_energies(mcprimary, mctree, mctree_idx, dtype=np.float32):
         this_mctree = mctree[this_idx[0] : this_idx[1]]
         pdg = this_mctree['particle']['pdg_encoding']
         en = this_mctree['particle']['energy']
+        parent = pdg[this_mctree['parent_idx']]
+        #parent[0] = 0
     
         muon_mask = np.abs(pdg) == 13
         if np.any(muon_mask):
             track_energy[i] = np.max(en[muon_mask])
 
+        tau_mask = np.abs(pdg) == 15
+        if np.any(tau_mask):
+            tau_energy[i] = np.max(en[tau_mask])
+            
         invisible_mask = (np.abs(pdg) == 12) | (np.abs(pdg) == 14) | (np.abs(pdg) == 16) 
         # exclude primary:
         invisible_mask[0] = False
         if np.any(invisible_mask):
             # we'll make the bold assumptions that none of the neutrinos re-interact ;)
-            invisible_energy[i] = np.sum(en[invisible_mask])
+            invisible_energy[i] = np.sum(en[(invisible_mask) & (np.abs(parent)!=13)])
 
-    cascade_energy = neutrino_energy - track_energy - invisible_energy
+    cascade_energy = neutrino_energy - track_energy - invisible_energy #- 0.5*tau_energy
     return neutrino_energy, track_energy, cascade_energy
 
 def get_params(labels, mcprimary, mctree, mctree_idx, dtype=np.float32):
@@ -61,7 +69,10 @@ def get_params(labels, mcprimary, mctree, mctree_idx, dtype=np.float32):
 
 def load_charges(dir='/home/iwsatlas1/peller/work/oscNext/level7_v01.04/140000_i3cols',
                  labels=['x', 'y', 'z', 'time', 'azimuth','zenith', 'cascade_energy', 'track_energy'],
-                 dtype=np.float32):
+                 dtype=np.float32,
+                 pulses=['SRTTWOfflinePulsesDC'],
+                 geo=pkg_resources.resource_filename('freedom', 'resources/geo_array.npy'),
+                 data=False):
     """
     Create training data for chargenet
     
@@ -74,29 +85,45 @@ def load_charges(dir='/home/iwsatlas1/peller/work/oscNext/level7_v01.04/140000_i
     labels
     """
     
-    hits_idx = np.load(os.path.join(dir, 'SRTTWOfflinePulsesDC/index.npy'))
-    hits = np.load(os.path.join(dir, 'SRTTWOfflinePulsesDC/data.npy'))
-    mctree_idx = np.load(os.path.join(dir, 'I3MCTree/index.npy'))
-    mctree = np.load(os.path.join(dir, 'I3MCTree/data.npy'))
-    mcprimary = np.load(os.path.join(dir, 'MCInIcePrimary/data.npy'))
+    #geo = np.load(geo)
+    if not type(pulses) == list:
+        pulses = [pulses]
+    N_events = len(np.load(os.path.join(dir, 'I3EventHeader/data.npy')))
+    
+    if not data:
+        mctree_idx = np.load(os.path.join(dir, 'I3MCTree/index.npy'))
+        mctree = np.load(os.path.join(dir, 'I3MCTree/data.npy'))
+        if os.path.exists(os.path.join(dir, 'MCInIcePrimary/data.npy')):
+            mcprimary = np.load(os.path.join(dir, 'MCInIcePrimary/data.npy'))
+        else:
+            mcprimary = mctree['particle'][mctree['level'] == 0]
 
     # Get charge per event
-    total_charge = np.zeros((hits_idx.shape[0], 2), dtype=dtype)
-    for i in range(len(hits_idx)):
-        this_idx = hits_idx[i]
-        this_hits = hits[this_idx['start'] : this_idx['stop']]
-
-        total_charge[i][0] = np.sum(this_hits['pulse']['charge'])
-        total_charge[i][1] = len(np.unique(this_hits['key']))
+    total_charge = np.zeros((N_events, 2*len(pulses)), dtype=dtype) #3
+    for j in range(len(pulses)):
+        hits_idx = np.load(os.path.join(dir, pulses[j]+'/index.npy'))
+        hits = np.load(os.path.join(dir, pulses[j]+'/data.npy'))
         
-    params = get_params(labels, mcprimary, mctree, mctree_idx)
+        for i in range(len(hits_idx)):
+            this_idx = hits_idx[i]
+            this_hits = hits[this_idx['start'] : this_idx['stop']]
+
+            total_charge[i][2*j] = np.sum(this_hits['pulse']['charge'])
+            total_charge[i][2*j+1] = len(np.unique(this_hits['key']))
+            #total_charge[i][2*j+2] = len(np.unique(this_hits['key']['string']))
+            
+    if not data:
+        params = get_params(labels, mcprimary, mctree, mctree_idx)
+    else:
+        params = None
     return total_charge, params, labels
 
 def load_doms(dir='/home/iwsatlas1/peller/work/oscNext/level7_v01.04/140000_i3cols',
               labels=['x', 'y', 'z', 'time', 'azimuth','zenith', 'cascade_energy', 'track_energy'],
               geo=pkg_resources.resource_filename('freedom', 'resources/geo_array.npy'),
               dtype=np.float32,
-              reduced=False):
+              reduced=False,
+              include_params=True):
     """
     Create training data for domnet, if reduced is True just uses DOMs in resources/allowed_DOMs.npy
     
@@ -139,11 +166,15 @@ def load_doms(dir='/home/iwsatlas1/peller/work/oscNext/level7_v01.04/140000_i3co
 
     doms = doms.reshape(-1, 4)
     
-    params = get_params(labels, mcprimary, mctree, mctree_idx)
+    if include_params:
+        params = get_params(labels, mcprimary, mctree, mctree_idx)
 
-    repeated_params = np.repeat(params, repeats=len(allowed_DOMs), axis=0)
+        repeated_params = np.repeat(params, repeats=len(allowed_DOMs), axis=0)
+
+        return doms, repeated_params, labels
     
-    return doms, repeated_params, labels
+    else:
+        return doms, labels
 
 def load_strings(dir='/home/iwsatlas1/peller/work/oscNext/level7_v01.04/140000_i3cols',
                  labels=['x', 'y', 'z', 'time', 'azimuth','zenith', 'cascade_energy', 'track_energy'],
@@ -265,7 +296,9 @@ def load_layers(dir='/home/iwsatlas1/peller/work/oscNext/level7_v01.04/140000_i3
 def load_hits(dir='/home/iwsatlas1/peller/work/oscNext/level7_v01.04/140000_i3cols',
               labels=['x', 'y', 'z', 'time', 'azimuth','zenith', 'cascade_energy', 'track_energy'],
               geo=pkg_resources.resource_filename('freedom', 'resources/geo_array.npy'),
-              dtype=np.float32):
+              dtype=np.float32,
+              pulses='SRTTWOfflinePulsesDC',
+              data=False):
     """
     Create training data for hitnet
     
@@ -278,42 +311,63 @@ def load_hits(dir='/home/iwsatlas1/peller/work/oscNext/level7_v01.04/140000_i3co
     labels
     """
     
-    hits_idx = np.load(os.path.join(dir, 'SRTTWOfflinePulsesDC/index.npy'))
-    hits = np.load(os.path.join(dir, 'SRTTWOfflinePulsesDC/data.npy'))
-    mctree_idx = np.load(os.path.join(dir, 'I3MCTree/index.npy'))
-    mctree = np.load(os.path.join(dir, 'I3MCTree/data.npy'))
-    mcprimary = np.load(os.path.join(dir, 'MCInIcePrimary/data.npy'))
+    hits_idx = np.load(os.path.join(dir, pulses+'/index.npy'))
+    hits = np.load(os.path.join(dir, pulses+'/data.npy'))
+    if not data:
+        mctree_idx = np.load(os.path.join(dir, 'I3MCTree/index.npy'))
+        mctree = np.load(os.path.join(dir, 'I3MCTree/data.npy'))
+        if os.path.exists(os.path.join(dir, 'MCInIcePrimary/data.npy')):
+            mcprimary = np.load(os.path.join(dir, 'MCInIcePrimary/data.npy'))
+        else:
+            mcprimary = mctree['particle'][mctree['level'] == 0]
 
     geo = np.load(geo)
+    if 'mDOM' in pulses:
+        pmt_dirs = np.load(pkg_resources.resource_filename('freedom', 'resources/mdom_directions.npy'))
+    elif 'DEgg' in pulses:
+        pmt_dirs = np.array([[0, np.pi], [np.pi, np.pi]]) #[zen, azi], zen: 0=down
+    else:
+        pmt_dirs = np.array([[0, np.pi]])
     
-    # constrcut hits array
+    # construct hits array
     
-    # shape N x (x, y, z, t, q, ...)
-    single_hits = np.empty(hits.shape + (8,), dtype=dtype)
-    string_idx = hits['key']['string'] - 1
+    # shape N x (x, y, z, t, q, flags, pmt dirs, idx)
+    single_hits = np.empty(hits.shape + (10,), dtype=dtype)
     om_idx = hits['key']['om'] - 1
+    pmt_idx = hits['key']['pmt']
+    if 'mDOM' in pulses or 'DEgg' in pulses or 'PDOM' in pulses:
+        string_idx = hits['key']['string'] - 87
+        idx = string_idx * 7 + om_idx * 24 + pmt_idx
+    else:
+        string_idx = hits['key']['string'] - 1
+        idx = string_idx * 60 + om_idx
 
     single_hits[:, 0:3] = geo[string_idx, om_idx]
     single_hits[:, 3] = hits['pulse']['time']
     single_hits[:, 4] = hits['pulse']['charge']
     single_hits[:, 5] = hits['pulse']['flags'] & 1 # is LC or not?
     single_hits[:, 6] = (hits['pulse']['flags'] & 2) / 2 # has ATWD or not?
-    single_hits[:, 7] = string_idx * 60 + om_idx
+    single_hits[:, 7:9] = pmt_dirs[pmt_idx] 
+    single_hits[:, 9] = idx # for inDOM shuffling
     
-    params = get_params(labels, mcprimary, mctree, mctree_idx)
+    if not data:
+        params = get_params(labels, mcprimary, mctree, mctree_idx)
 
-    repeats = (hits_idx['stop'] - hits_idx['start']).astype(np.int64)
-    repeated_params = np.repeat(params, repeats=repeats, axis=0)
+        repeats = (hits_idx['stop'] - hits_idx['start']).astype(np.int64)
+        repeated_params = np.repeat(params, repeats=repeats, axis=0)
+    else:
+        repeated_params = None
 
-    
     return single_hits, repeated_params, labels
 
 
 def load_events(dir='/home/iwsatlas1/peller/work/oscNext/level7_v01.04/140000_i3cols',
-              labels=['x', 'y', 'z', 'time', 'azimuth','zenith', 'cascade_energy', 'track_energy'],
-              geo=pkg_resources.resource_filename('freedom', 'resources/geo_array.npy'),
-              recos = {},
-              dtype=np.float32):
+               labels=['x', 'y', 'z', 'time', 'azimuth','zenith', 'cascade_energy', 'track_energy'],
+               geo=pkg_resources.resource_filename('freedom', 'resources/geo_array.npy'),
+               recos = {},
+               dtype=np.float32,
+               include_doms=False,
+               data=False):
     """
     Create event=by=event data for hit and charge net
     
@@ -324,28 +378,31 @@ def load_events(dir='/home/iwsatlas1/peller/work/oscNext/level7_v01.04/140000_i3
             shape (N_hits, 9)
         total_charge : float
         params : ndarray
-            shape (len(labels))
+            shape (len(labels)) (if not data)
     labels
     """
     
     hits_idx = np.load(os.path.join(dir, 'SRTTWOfflinePulsesDC/index.npy'))
     
-    single_hits, repeated_params, labels = load_hits(dir=dir, labels=labels, geo=geo, dtype=dtype)
+    single_hits, repeated_params, labels = load_hits(dir=dir, labels=labels, geo=geo, dtype=dtype, data=data)
 
-    total_charge, params, labels = load_charges(dir=dir, labels=labels, dtype=dtype)
+    total_charge, params, labels = load_charges(dir=dir, labels=labels, dtype=dtype, data=data)
 
-    string_charges, _, _ = load_strings(dir=dir, labels=labels, geo=geo, dtype=dtype)
-
-    string_charges = string_charges.reshape(len(total_charge), 86, -1)
+    #string_charges, _, _ = load_strings(dir=dir, labels=labels, geo=geo, dtype=dtype)
+    #string_charges = string_charges.reshape(len(total_charge), 86, -1)
     
-    layer_charges, _, _ = load_layers(dir=dir, labels=labels, geo=geo, dtype=dtype, n_layers=60)
-
-    layer_charges = layer_charges.reshape(len(total_charge), 60, -1)
-
+    #layer_charges, _, _ = load_layers(dir=dir, labels=labels, geo=geo, dtype=dtype, n_layers=60)
+    #layer_charges = layer_charges.reshape(len(total_charge), 60, -1)
+    
+    if include_doms:
+        dom_charges, _ = load_doms(dir=dir, labels=labels, 
+                                   geo=geo, dtype=dtype, include_params=False)
+        dom_charges = dom_charges.reshape(len(total_charge), 5160, -1)
+        
     reco_params = {}
     for r,f in recos.items():
         reco = np.load(os.path.join(dir, f, 'data.npy'))
-        reco_params[r] = np.zeros_like(params)
+        reco_params[r] = np.zeros((len(total_charge), len(labels))) #np.zeros_like(params)
         for i, label in enumerate(labels):
             if label == 'x': reco_params[r][:, i] = reco['pos']['x']
             elif label == 'y': reco_params[r][:, i] = reco['pos']['y']
@@ -374,10 +431,66 @@ def load_events(dir='/home/iwsatlas1/peller/work/oscNext/level7_v01.04/140000_i3
         event = {}
         event['total_charge'] = total_charge[i]
         event['hits'] = single_hits[hits_idx[i]['start'] : hits_idx[i]['stop']]
-        event['params'] = params[i]
-        event['strings'] = string_charges[i]
-        event['layers'] = layer_charges[i]
+        if not data:
+            event['params'] = params[i]
+        #event['strings'] = string_charges[i]
+        #event['layers'] = layer_charges[i]
+        if include_doms:
+            event['doms'] = dom_charges[i]
         for r in recos.keys():
             event[r] = reco_params[r][i]
         events.append(event)
+    return events, labels
+
+
+def load_upgrade_events(dir='/home/iwsatlas1/peller/work/oscNext/level7_v01.04/140000_i3cols',
+                       labels=['x', 'y', 'z', 'time', 'azimuth','zenith', 'cascade_energy', 'track_energy'],
+                       geo=pkg_resources.resource_filename('freedom', 'resources/geo_array.npy'),
+                       geo_upgarde=pkg_resources.resource_filename('freedom', 'resources/geo_array_upgrade.npy'),
+                       DOM_key = 'IceCubePulsesTWSRT',
+                       mDOM_key = 'mDOMPulsesTWSRT',
+                       DEgg_key = 'DEggPulsesTWSRT',
+                       dtype=np.float32):
+    """
+    Create event=by=event data for hit and charge net
+    
+    Returns:
+    --------
+    list of:
+        single_hits : ndarray
+            shape (N_hits, 9)
+        total_charge : float
+        params : ndarray
+            shape (len(labels))
+    labels
+    """
+    
+    hits_idx_DOM = np.load(os.path.join(dir, DOM_key+'/index.npy'))
+    hits_idx_mDOM = np.load(os.path.join(dir, mDOM_key+'/index.npy'))
+    hits_idx_DEgg = np.load(os.path.join(dir, DEgg_key+'/index.npy'))
+    
+    single_hits_DOM, _, _ = load_hits(dir=dir, labels=labels, geo=geo, dtype=dtype, pulses=DOM_key)
+    single_hits_mDOM, _, _ = load_hits(dir=dir, labels=labels, geo=geo_upgarde, dtype=dtype, pulses=mDOM_key)
+    single_hits_DEgg, _, _ = load_hits(dir=dir, labels=labels, geo=geo_upgarde, dtype=dtype, pulses=DEgg_key)
+
+    total_charge_DOM, params, _ = load_charges(dir=dir, labels=labels, dtype=dtype, pulses=DOM_key)
+    total_charge_mDOM, _, _ = load_charges(dir=dir, labels=labels, dtype=dtype, pulses=mDOM_key)
+    total_charge_DEgg, _, _ = load_charges(dir=dir, labels=labels, dtype=dtype, pulses=DEgg_key)
+
+            
+    events = []
+    for i in range(len(total_charge_DOM)):
+        if np.sum(total_charge_DOM[i]) + np.sum(total_charge_mDOM[i]) + np.sum(total_charge_DEgg[i]) == 0:
+            continue
+        
+        event = {}
+        event['total_charge_DOM'] = total_charge_DOM[i]
+        event['total_charge_mDOM'] = total_charge_mDOM[i]
+        event['total_charge_DEgg'] = total_charge_DEgg[i]
+        event['hits_DOM'] = single_hits_DOM[hits_idx_DOM[i]['start'] : hits_idx_DOM[i]['stop']]
+        event['hits_mDOM'] = single_hits_mDOM[hits_idx_mDOM[i]['start'] : hits_idx_mDOM[i]['stop']]
+        event['hits_DEgg'] = single_hits_DEgg[hits_idx_DEgg[i]['start'] : hits_idx_DEgg[i]['stop']]
+        event['params'] = params[i]
+        events.append(event)
+    
     return events, labels
