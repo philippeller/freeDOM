@@ -59,7 +59,6 @@ class cpandel_gen(rv_continuous):
     
     t : variable of distribution (time)
     d : distance parameter (length)
-    s : jitter (gauss covolution width)
     
     Instantiation parameters (optional):
     ------------------------------------
@@ -68,6 +67,7 @@ class cpandel_gen(rv_continuous):
     lambda_s : scattering length (length)
     lambda_a : absorption length (length)
     v : velocity (length/time)
+    s : jitter (gauss covolution width)
     
     Notes:
     ------
@@ -75,20 +75,21 @@ class cpandel_gen(rv_continuous):
     
     """
     
-    def __init__(self, tau=557, lambda_s=33.3, lambda_a=98, v=0.3/1.3, **kwargs):
+    def __init__(self, tau=557, lambda_s=33.3, lambda_a=98, v=0.3/1.3, s=5, **kwargs):
         super().__init__(**kwargs)
         self.lambda_s = lambda_s
         self.rho = v/lambda_a + 1/tau
+        self.s = s
         self.pandel = pandel_gen(a=0.0, tau=tau, lambda_a=lambda_a, lambda_s=lambda_s, v=v, name='pandel')
     
-    def _pdf(self, t, d, s):
+    def _pdf(self, t, d):
                
         xi = d/self.lambda_s
-        eta = self.rho*s - t/s
+        eta = self.rho*self.s - t/self.s
 
         # regions:
-        inner  = (t > -5 * s) & (t < 30 * s) & (xi < 5 * s)
-        left = (t < self.rho * s**2)
+        inner  = (t > -5 * self.s) & (t < 30 * self.s) & (xi < 5 * self.s)
+        left = (t < self.rho * self.s**2)
         lower = (xi < 1)
         
         p = np.zeros_like(t)
@@ -105,7 +106,7 @@ class cpandel_gen(rv_continuous):
             t_array = len(t) > 1
             d_array = len(d) > 1
             
-            if np.any(mask): p[mask] = f(xi[mask] if d_array else xi, t[mask] if t_array else t, eta[mask] if t_array else eta, s)
+            if np.any(mask): p[mask] = f(xi[mask] if d_array else xi, t[mask] if t_array else t, eta[mask] if t_array else eta)
 
         return p
         
@@ -125,21 +126,21 @@ class cpandel_gen(rv_continuous):
     def N_2(beta):
         return beta**2 / 288 * (6160 * beta**4 + 18480 * beta**3 + 19404 * beta**2 + 8028 * beta + 945)
 
-    def f1(self, xi, t, eta, s):
+    def f1(self, xi, t, eta):
         ''' No approximation '''
-        return self.rho**xi * s**(xi - 1) * np.exp(-t**2 / (2 * s**2)) / 2**((1 + xi) / 2) * (
+        return self.rho**xi * self.s**(xi - 1) * np.exp(-t**2 / (2 * self.s**2)) / 2**((1 + xi) / 2) * (
                                         hyp1f1(0.5 * xi, 0.5, 0.5 * eta**2) / gamma(0.5 * (xi + 1)) 
                                         - np.sqrt(2) * eta * hyp1f1(0.5 * (xi + 1), 1.5, 0.5 * eta**2) / gamma(0.5 * xi)
                                         ) 
     
-    def f2(self, xi, t, eta, s):
-        return np.exp(self.rho**2 * s**2 / 2)*self.pandel.pdf(t, xi*self.lambda_s) 
+    def f2(self, xi, t, eta):
+        return np.exp(self.rho**2 * self.s**2 / 2)*self.pandel.pdf(t, xi*self.lambda_s) 
     
-    def f3(self, xi, t, eta, s):
+    def f3(self, xi, t, eta):
         z = - eta / np.sqrt(4 * xi - 2)
         k = self.k(z)
         
-        alpha = -t**2 / (2 * s**2) + eta**2 / 4 - xi/2 + 1/4 + k * (2 * xi - 1) - 1/4 * np.log(1 + z**2) - xi/2 * np.log(2) + (xi - 1) / 2 * np.log(2 * xi - 1) + xi * np.log(self.rho) + (xi - 1) * np.log(s)
+        alpha = -t**2 / (2 * self.s**2) + eta**2 / 4 - xi/2 + 1/4 + k * (2 * xi - 1) - 1/4 * np.log(1 + z**2) - xi/2 * np.log(2) + (xi - 1) / 2 * np.log(2 * xi - 1) + xi * np.log(self.rho) + (xi - 1) * np.log(self.s)
         
         beta = self.beta(z)
         N_1 = self.N_1(beta)
@@ -149,7 +150,7 @@ class cpandel_gen(rv_continuous):
         
         return np.exp(alpha) / gamma(xi) * Phi
     
-    def f4(self, xi, t, eta, s):
+    def f4(self, xi, t, eta):
         z = eta / np.sqrt(4 * xi - 2)
         k = self.k(z)
         
@@ -161,19 +162,20 @@ class cpandel_gen(rv_continuous):
         
         Psi = 1 + N_1 / (2 * xi - 1) + N_2 / (2 * xi - 1)**2
         
-        return self.rho**xi * s**(xi - 1) * np.exp(-t**2 / (2 * s**2) + eta**2 / 4) / np.sqrt(2 * np.pi) * U * np.exp(-k * (2 * xi -1)) * (1 + z**2)**-0.25 * Psi        
+        return self.rho**xi * self.s**(xi - 1) * np.exp(-t**2 / (2 * self.s**2) + eta**2 / 4) / np.sqrt(2 * np.pi) * U * np.exp(-k * (2 * xi -1)) * (1 + z**2)**-0.25 * Psi        
 
-    def f5(self, xi, t, eta, s):
-        return (self.rho * s)**xi / np.sqrt(2 * np.pi * s**2) * eta**-xi * np.exp(-t**2 / (2 * s**2))
+    def f5(self, xi, t, eta):
+        return (self.rho * self.s)**xi / np.sqrt(2 * np.pi * self.s**2) * eta**-xi * np.exp(-t**2 / (2 * self.s**2))
     
-    def _rvs(self, d, s, size=None, random_state=None):
-        return self.pandel.rvs(d, size=size, random_state=random_state) + random_state.standard_normal(size) * s
+    def _rvs(self, d, size=None, random_state=None):
+        return self.pandel.rvs(d, size=size, random_state=random_state) + random_state.standard_normal(size) * self.s
     
     
     def freeze(self, *args, **kwds):
         frozen = rv_frozen(self, *args, **kwds)
         frozen.dist.lambda_s = self.lambda_s
         frozen.dist.rho = self.rho
+        frozen.dist.s = self.s
         frozen.dist.pandel = self.pandel
         return frozen
     
