@@ -68,7 +68,7 @@ class toy_experiment():
         t_std could in principle vary with the hypothesis, even though it doesn't in this example
         '''
         t_exp = arrival_time(det_x, hypo_t, hypo_x, hypo_b)
-        return -(t-t_exp)**2/(2*self.t_std**2) + np.log(self.t_std)
+        return -(t-t_exp)**2/(2*self.t_std**2) - np.log(self.t_std)
 
     # dom formulation
     def dom_hit_term(self, hit_times, x, b, t):
