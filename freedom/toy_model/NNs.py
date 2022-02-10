@@ -10,13 +10,13 @@ class DataGenerator(tf.keras.utils.Sequence):
         assert shuffle in ['free', 'inDOM'], "Choose either 'free' or 'inDOM' shuffling."
         
         self.batch_size = int(batch_size/2) # half true labels half false labels
-        self.data = x
-        self.params = t
+        self.data = np.array(x)
+        self.params = np.array(t)
         
         #spread absolute time values
         if len(self.data[0]) > 2:
             time_shifts = np.random.normal(0, 5, len(self.data))
-            self.data[:, 0] += time_shifts
+            self.data[:, 3] += time_shifts
             self.params[:, 3] += time_shifts
             
         if shuffle == 'inDOM':
@@ -86,13 +86,14 @@ class DataGenerator(tf.keras.utils.Sequence):
 class charge_trafo(tf.keras.layers.Layer):
     def call(self, charges, theta, dets=None):
         out = tf.stack([
-                 charges[:,0]/126.,
-                 charges[:,1]/18.,
-                 (theta[:,0]+12.)/24.,
-                 (theta[:,1]+12.)/24.,
-                 (theta[:,3]+3.)/37.,
-                 (tf.math.sin(theta[:,4])+1.)/2.,
-                 (tf.math.cos(theta[:,4])+1.)/2.,
+                 charges[:,0],
+                 charges[:,1],
+                 theta[:,0],
+                 theta[:,1],
+                 tf.math.sin(theta[:,4]),
+                 tf.math.cos(theta[:,4]),
+                 theta[:,6],
+                 #theta[:,7]
                 ],
                 axis=1
                 ) 
@@ -118,21 +119,24 @@ class charge_trafo_3D(tf.keras.layers.Layer):
 
 class hit_trafo(tf.keras.layers.Layer):
     def call(self, hits, theta, dets=None):
-        dx = theta[:,0] - hits[:,1]
-        dy = theta[:,1] - hits[:,2]
+        dx = theta[:,0] - hits[:,0]
+        dy = theta[:,1] - hits[:,1]
         dist = tf.math.sqrt(tf.math.square(dx) + tf.math.square(dy))
-        dt = theta[:,2] - hits[:,0]
+        dt = theta[:,3] - hits[:,3]
+        delta = dt - dist
         
         out = tf.stack([
                  hits[:,0],
                  hits[:,1],
-                 hits[:,2],
-                 dx, #theta[:,0],
-                 dy, #theta[:,1],
-                 dt, #theta[:,2],
+                 hits[:,3],
+                 dx/dist,
+                 dy/dist,
+                 delta,
+                 dist,
                  tf.math.sin(theta[:,4]),
                  tf.math.cos(theta[:,4]),
-                 dist,
+                 theta[:,6],
+                 #theta[:,7],
                 ],
                 axis=1
                 )    
@@ -141,12 +145,12 @@ class hit_trafo(tf.keras.layers.Layer):
 class hit_trafo_3D(tf.keras.layers.Layer):
     def call(self, hits, theta, dets=None):
         
-        dx = theta[:, 0] - hits[:, 1]
-        dy = theta[:, 1] - hits[:, 2]
-        dz = theta[:, 2] - hits[:, 3]
+        dx = theta[:, 0] - hits[:, 0]
+        dy = theta[:, 1] - hits[:, 1]
+        dz = theta[:, 2] - hits[:, 2]
         dist = tf.math.sqrt(tf.math.square(dx) + tf.math.square(dy) + tf.math.square(dz))
         
-        dt = hits[:, 0] - theta[:, 3]
+        dt = hits[:, 3] - theta[:, 3]
         delta = dt - dist
         delta = tf.where(delta<0, -tf.math.log1p(-delta), tf.math.log1p(delta))
         
@@ -177,9 +181,9 @@ class hit_trafo_3D(tf.keras.layers.Layer):
 class dom_trafo_3D(tf.keras.layers.Layer):
     def call(self, doms, theta, dets=None):
         
-        dx = theta[:, 0] - doms[:, 1]
-        dy = theta[:, 1] - doms[:, 2]
-        dz = theta[:, 2] - doms[:, 3]
+        dx = theta[:, 0] - doms[:, 0]
+        dy = theta[:, 1] - doms[:, 1]
+        dz = theta[:, 2] - doms[:, 2]
         dist = tf.math.sqrt(tf.math.square(dx) + tf.math.square(dy) + tf.math.square(dz))
         
         dir_x = tf.math.sin(theta[:, 5])*tf.math.cos(theta[:, 4])
@@ -206,7 +210,7 @@ class dom_trafo_3D(tf.keras.layers.Layer):
         return out
 
 
-def get_hmodel(x_shape, t_shape, trafo, activation='relu', final_activation='exponential'):
+def get_hmodel(x_shape, t_shape, trafo, activation='elu', final_activation='exponential'):
     x_input = tf.keras.Input(shape=(x_shape,))
     t_input = tf.keras.Input(shape=(t_shape,))
 
@@ -247,7 +251,7 @@ def get_hmodel(x_shape, t_shape, trafo, activation='relu', final_activation='exp
     
     return model
 
-def get_cmodel(x_shape, t_shape, trafo, activation='relu', final_activation='exponential'):
+def get_cmodel(x_shape, t_shape, trafo, activation='elu', final_activation='exponential'):
     x_input = tf.keras.Input(shape=(x_shape,))
     t_input = tf.keras.Input(shape=(t_shape,))
 
