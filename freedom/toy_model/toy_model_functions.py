@@ -3,23 +3,24 @@ from collections import namedtuple
 from freedom.utils.pandel import pandel_gen, cpandel_gen
 from scipy.spatial import distance
 from scipy import stats
+from tqdm import tqdm
 
 
 const_tuple = namedtuple('const', ['lambda_a', 'lambda_s', 'tau', 'n_ref', 'c', 's', 'trck_e_to_l', 'ns_per_trck_m', 'ns_per_cscd_gev', 'noise_level', 'r_pmt', 'q_eff', 'track_step'])
 
-std_consts = const_tuple(lambda_a=100,
-                     lambda_s=30,
-                     tau=500,
-                     n_ref=1.3,
-                     c=0.3,
-                     s=10,
-                     trck_e_to_l=4.5,
-                     ns_per_trck_m=2451,
-                     ns_per_cscd_gev = 12819,
-                     noise_level=1e-10,
-                     r_pmt=0.1,
-                     q_eff=0.3,
-                     track_step=1,
+std_consts = const_tuple(lambda_a=100, # Absorbtion length
+                     lambda_s=30, # Scattering length
+                     tau=500, # some other pandel parameter that i have no idea of
+                     n_ref=1.3, # refractive index
+                     c=0.3, # speed of light
+                     s=10, # time smearing width
+                     trck_e_to_l=4.5, # track energy to length factor
+                     ns_per_trck_m=2451, # photons per meter track
+                     ns_per_cscd_gev = 12819, # photons per GeV cascade
+                     noise_level=1e-10, # noise floor
+                     r_pmt=0.1, # PMT radius
+                     q_eff=0.3, # PMT efficiency
+                     track_step=1, # track sampling step length
                     )
 
 class toy_model():
@@ -30,13 +31,12 @@ class toy_model():
         self.consts = consts
         self.pandel = cpandel_gen(tau=self.consts.tau, lambda_a=self.consts.lambda_a, lambda_s=self.consts.lambda_s, v=self.consts.c/self.consts.n_ref, s=self.consts.s, name='pandel')
   
-    def model(self, x, y, z, t, az, zen, e_cscd, e_trck, inverted=True):
+    def model(self, x, y, z, t, az, zen, e_cscd, e_trck):
         """Simple event model
 
         Paramaters:
         -----------
         x, y, z, t, az, zen, e_cscd, e_trck : truth parameters
-        inverted : interprete angles as neutrinos (incoming direction)
 
         Returns:
         --------
@@ -45,9 +45,8 @@ class toy_model():
         length = e_trck * self.consts.trck_e_to_l
         segments = np.arange(0, 1 +np.ceil(length/self.consts.track_step))
 
-        if inverted:
-            zen = np.pi - zen
-            az = az + np.pi
+        zen = np.pi - zen
+        az = az + np.pi
 
         dx = np.sin(zen) * np.cos(az)
         dy = np.sin(zen) * np.sin(az)
@@ -67,7 +66,7 @@ class toy_model():
     def survival(self, d):
         return np.exp(-d/self.consts.lambda_a) / (d + self.consts.r_pmt)**2 * (self.consts.r_pmt)**2 / 4 * self.consts.q_eff
 
-    def generate(self, truth):
+    def generate_event(self, truth):
         # generate events
         segments = self.model(*truth)
 
@@ -93,6 +92,138 @@ class toy_model():
 
         return hits, sensors[:, 5]
     
+    @staticmethod
+    def sample_sphere(center=np.zeros(3), radius=1):
+        x, y, z = np.random.randn(3)
+        r = np.sqrt(x**2 + y**2 + z**2)
+        u = np.random.rand()
+        return (np.array([x, y, z])/r*u**(1/3) * radius) + center
+    
+    def endpoint(self, x, y, z, t, az, zen, e_cscd, e_trck):
+        '''calculate track enpoint'''
+        length = e_trck * self.consts.trck_e_to_l
+
+        zen = np.pi - zen
+        az = az + np.pi
+        d = np.array([np.sin(zen) * np.cos(az), np.sin(zen) * np.sin(az), np.cos(zen)])
+        
+        return np.array([x, y, z]) + d * length
+    
+    def generate_event_sphere(self, n, e_lim=(1,20), inelast_lim=(0,1), t_width=100, N_min=0, center=np.zeros(3), radius=30, contained=True):
+        """ Generete events inside a sphere
+        
+        n : int
+            numbr of events
+        e_lim : tuple
+            limits for energy distribution
+        inelast_lim : tuple
+            lmits for inelasticity distribution
+        t_width : float
+            width of time distribution
+        N_min : int
+            minimum number of pulses
+        center : array
+            center of generation sphere
+        radius : float
+            radisu of generation sphere
+        contained : bool
+            track enpoint must be contained within generation volume
+        
+        """
+        
+        events = []
+        truths = []
+        
+        for i in tqdm(range(n)):
+            while True:
+                while True:
+                    x, y, z = self.sample_sphere(center, radius)
+                    t = np.random.randn() * t_width
+                    az = np.random.uniform(*(0,2*np.pi))
+                    zen = np.arccos(np.random.uniform(*(-1,1)))
+                    E = np.random.uniform(*e_lim)
+                    inelast = np.random.uniform(*inelast_lim)
+                    Ecscd = E * (1 - inelast)
+                    Etrck = E * inelast
+
+                    truth = np.array([x, y, z, t, az, zen, Ecscd, Etrck])
+
+                    if contained:
+                        endpoint = self.endpoint(*truth)
+                        if np.sum(endpoint - center) <= radius**2:
+                            break
+                    else:
+                        break
+
+                hits, n_obs = self.generate_event(truth)
+                if np.sum(n_obs) >= N_min:
+                    break
+
+            truths.append(truth)
+            events.append([np.array([np.sum(n_obs), np.sum(n_obs > 0)]), hits]) 
+            
+        events = np.array(events, dtype='O')
+        truths = np.array(truths)
+        
+        return events, truths
+            
+    def generate_event_box(self, n, e_lim=(1,20), N_min=0, x_lim=(-10,10), y_lim=(-10,10), z_lim=(-10,10), inelast_lim=(0,1), t_width=100, contained=True):
+        """ Generete events inside a box
+        
+        n : int
+            numbr of events
+        e_lim : tuple
+            limits for energy distribution
+        inelast_lim : tuple
+            lmits for inelasticity distribution
+        t_width : float
+            width of time distribution
+        N_min : int
+            minimum number of pulses
+        x_lim, y_lim, z_lim : tuples
+            limits for vertex distributions
+        contained : bool
+            track enpoint must be contained within generation volume
+        
+        """
+        events = []
+        truths = []
+        
+        for i in tqdm(range(n)):
+        
+            while True:
+                while True:
+                    x = np.random.uniform(*x_lim)
+                    y = np.random.uniform(*y_lim)
+                    z = np.random.uniform(*z_lim)
+                    t = np.random.randn() * t_width
+                    az = np.random.uniform(*(0,2*np.pi))
+                    zen = np.arccos(np.random.uniform(*(-1,1)))
+                    E = np.random.uniform(*e_lim)
+                    inelast = np.random.uniform(*inelast_lim)
+                    Ecscd = E * (1 - inelast)
+                    Etrck = E * inelast
+
+                    truth = np.array([x, y, z, t, az, zen, Ecscd, Etrck])
+
+                    if contained:
+                        endpoint = self.endpoint(*truth)
+                        if (endpoint[0] >= x_lim[0]) & (endpoint[0] <= x_lim[1]) & (endpoint[1] >= y_lim[0]) & (endpoint[1] <= y_lim[1]) & (endpoint[2] >= z_lim[0]) & (endpoint[2] <= z_lim[1]):
+                            break
+                    else:
+                        break
+
+                hits, n_obs = self.generate_event(truth)
+                if np.sum(n_obs) >= N_min:
+                    break
+        
+            truths.append(truth)
+            events.append([np.array([np.sum(n_obs), np.sum(n_obs > 0)]), hits]) 
+            
+        events = np.array(events, dtype='O')
+        truths = np.array(truths)
+        
+        return events, truths
     
     def p_terms(self, segments, hits):
         hits_x_segments = np.repeat(hits[:,np.newaxis,:], segments.shape[0], axis=1)
@@ -101,9 +232,9 @@ class toy_model():
         # hit time - true time - direct line-of-sight time
         d_t = hits_x_segments[:,:,3] - segments[np.newaxis,:,3] - hits_x_segments[:,:, 4]*self.consts.n_ref/self.consts.c
         # Mixture of pdfs of all segments for hit in sensor, weighted by n_exp
-        ps = np.clip(np.nan_to_num(self.pandel.pdf(x = d_t, d = hits_x_segments[:,:,4]) ), a_min=0, a_max=None) * n_exp
+        ps = np.clip(np.nan_to_num(self.pandel.pdf(d_t, d=hits_x_segments[:,:,4]) ), a_min=0, a_max=None) * n_exp
         # summing up mixture + pedestal (e.g. noise rate) to avoid log(0)
-        return np.sum(ps, axis=1) + self.consts.noise_level   
+        return np.sum(ps, axis=1) / np.sum(n_exp, axis=1) + self.consts.noise_level   
 
 
     def N_exp(self, segments):
