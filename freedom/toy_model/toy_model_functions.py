@@ -90,7 +90,7 @@ class toy_model():
         hits = np.repeat(sensors_x_segments, n_obs.flatten(), axis=0)
         hits[:, 3] += self.pandel.rvs(d=hits[:,4])
 
-        return hits, sensors[:, 5]
+        return np.delete(hits, 4, axis=1), sensors[:, 5]
     
     @staticmethod
     def sample_sphere(center=np.zeros(3), radius=1):
@@ -160,14 +160,14 @@ class toy_model():
                     break
 
             truths.append(truth)
-            events.append([np.array([np.sum(n_obs), np.sum(n_obs > 0)]), hits]) 
+            events.append([hits, n_obs])
             
         events = np.array(events, dtype='O')
         truths = np.array(truths)
         
         return events, truths
             
-    def generate_event_box(self, n, e_lim=(1,20), N_min=0, x_lim=(-10,10), y_lim=(-10,10), z_lim=(-10,10), inelast_lim=(0,1), t_width=100, contained=True):
+    def generate_event_box(self, n, e_lim=(1,20), N_min=0, x_lim=(-10,10), y_lim=(-10,10), z_lim=(-10,10), coszen_lim=(-1,1), inelast_lim=(0,1), t_width=100, contained=True):
         """ Generete events inside a box
         
         n : int
@@ -198,7 +198,7 @@ class toy_model():
                     z = np.random.uniform(*z_lim)
                     t = np.random.randn() * t_width
                     az = np.random.uniform(*(0,2*np.pi))
-                    zen = np.arccos(np.random.uniform(*(-1,1)))
+                    zen = np.arccos(np.random.uniform(*coszen_lim))
                     E = np.random.uniform(*e_lim)
                     inelast = np.random.uniform(*inelast_lim)
                     Ecscd = E * (1 - inelast)
@@ -218,7 +218,7 @@ class toy_model():
                     break
         
             truths.append(truth)
-            events.append([np.array([np.sum(n_obs), np.sum(n_obs > 0)]), hits]) 
+            events.append([hits, n_obs])
             
         events = np.array(events, dtype='O')
         truths = np.array(truths)
@@ -258,7 +258,7 @@ class toy_model():
         N = self.N_exp(segments)
         N_tot = np.sum(N)
 
-        f = N[hits[:, 6].astype(int)]/N_tot
+        f = N[hits[:, -1].astype(int)]/N_tot
         ps = self.p_terms(segments, hits) * f
 
         return -np.sum(np.log(ps))
