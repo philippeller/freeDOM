@@ -2,7 +2,7 @@ import numpy as np
 from icosphere import icosphere
 
 def get_spherical_detector(radius=20, subdivisions=12):
-    vertices, faces = icosphere(12)
+    vertices, faces = icosphere(subdivisions)
     return vertices * radius
 
 

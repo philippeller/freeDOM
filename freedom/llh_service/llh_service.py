@@ -20,7 +20,7 @@ import tensorflow as tf
 import tensorflow_addons as tfa
 import zmq
 
-from freedom.toy_model.NNs import charge_trafo_3D, hit_trafo_3D
+from freedom.toy_model.NNs import charge_trafo_3D, hit_trafo_3D, dom_trafo_3D #_3D
 from freedom.neural_nets.transformations import chargenet_trafo, hitnet_trafo
 from freedom.neural_nets.transformations import (
     stringnet_trafo,
@@ -154,7 +154,7 @@ class LLHService:
             hitnet_file = self._get_model_path(hitnet_file)
             if toy:
                 hitnet = tf.keras.models.load_model(
-                    hitnet_file, custom_objects={"hit_trafo_3D": hit_trafo_3D}
+                    hitnet_file, custom_objects={"hit_trafo_3D": hit_trafo_3D} #_3D
                 )
             else:
                 hitnet = tf.keras.models.load_model(
@@ -167,7 +167,7 @@ class LLHService:
                 chargenet_file = self._get_model_path(chargenet_file)
                 if toy:
                     chargenet = tf.keras.models.load_model(
-                        chargenet_file, custom_objects={"charge_trafo_3D": charge_trafo_3D}
+                        chargenet_file, custom_objects={"charge_trafo_3D": charge_trafo_3D} #_3D
                     )
                 else:
                     chargenet = tf.keras.models.load_model(
@@ -202,9 +202,14 @@ class LLHService:
                     raise ValueError("ndoms must be specified when using domnet!")
 
                 domnet_file = self._get_model_path(domnet_file)
-                domnet = tf.keras.models.load_model(
-                    domnet_file, custom_objects={"domnet_trafo": domnet_trafo}
-                )
+                if toy:
+                    domnet = tf.keras.models.load_model(
+                        domnet_file, custom_objects={"dom_trafo_3D": dom_trafo_3D} #_3D
+                    )
+                else:
+                    domnet = tf.keras.models.load_model(
+                        domnet_file, custom_objects={"domnet_trafo": domnet_trafo}
+                    )
                 domnet.layers[-1].activation = tf.keras.activations.linear
 
                 chargenet = eval_llh.wrap_partial_chargenet(
