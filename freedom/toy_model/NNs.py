@@ -236,40 +236,18 @@ class dom_trafo_3D(tf.keras.layers.Layer):
         return out
 
 
-def get_hmodel(x_shape, t_shape, trafo, activation='elu', final_activation='exponential'):
+def get_hmodel(x_shape, t_shape, trafo, activation='elu', final_activation='exponential', nodes=250, n_layer=12):
     x_input = tf.keras.Input(shape=(x_shape,))
     t_input = tf.keras.Input(shape=(t_shape,))
 
-    inp = trafo()(x_input, t_input)
+    h = trafo()(x_input, t_input)
 
-    h = tf.keras.layers.Dense(250, activation=activation)(inp)
-    #h = tf.keras.layers.Dropout(0.01)(h)
-    h = tf.keras.layers.Dense(250, activation=activation)(h)
-    #h = tf.keras.layers.Dropout(0.01)(h)
-    h = tf.keras.layers.Dense(250, activation=activation)(h)
-    #h = tf.keras.layers.Dropout(0.01)(h)
-    h = tf.keras.layers.Dense(250, activation=activation)(h)
-    #h = tf.keras.layers.Dropout(0.01)(h)
-    h = tf.keras.layers.Dense(250, activation=activation)(h)
-    #h = tf.keras.layers.Dropout(0.01)(h)
-    h = tf.keras.layers.Dense(250, activation=activation)(h)
-    #h = tf.keras.layers.Dropout(0.01)(h)
-    h = tf.keras.layers.Dense(250, activation=activation)(h)
-    #h = tf.keras.layers.Dropout(0.01)(h)
-    h = tf.keras.layers.Dense(250, activation=activation)(h)
-    #h = tf.keras.layers.Dropout(0.01)(h)
-    h = tf.keras.layers.Dense(250, activation=activation)(h)
-    #h = tf.keras.layers.Dropout(0.01)(h)
-    h = tf.keras.layers.Dense(250, activation=activation)(h)
-    #h = tf.keras.layers.Dropout(0.01)(h)
-    h = tf.keras.layers.Dense(250, activation=activation)(h)
-    #h = tf.keras.layers.Dropout(0.01)(h)
-    h = tf.keras.layers.Dense(250, activation=activation)(h)
-    #h = tf.keras.layers.Dropout(0.01)(h)
-    h = tf.keras.layers.Dense(250, activation=final_activation)(h)
-    #h = tf.keras.layers.Dropout(0.01)(h)
-    h = tf.keras.layers.Dense(250, activation=activation)(h)
-    #h = tf.keras.layers.Dropout(0.01)(h)
+    for i in range(n_layer):
+        h = tf.keras.layers.Dense(nodes, activation=activation)(h)
+        #h = tf.keras.layers.Dropout(0.01)(h)
+        #h = tf.keras.layers.BatchNormalization()(h)
+    h = tf.keras.layers.Dense(nodes, activation=final_activation)(h)
+    h = tf.keras.layers.Dense(nodes, activation=activation)(h)
 
     outputs = tf.keras.layers.Dense(1, activation='sigmoid')(h)
 
@@ -277,38 +255,17 @@ def get_hmodel(x_shape, t_shape, trafo, activation='elu', final_activation='expo
     
     return model
 
-def get_cmodel(x_shape, t_shape, trafo, activation='elu', final_activation='exponential'):
+def get_cmodel(x_shape, t_shape, trafo, activation='elu', final_activation='exponential', nodes=150, n_layer=11):
     x_input = tf.keras.Input(shape=(x_shape,))
     t_input = tf.keras.Input(shape=(t_shape,))
 
-    inp = trafo()(x_input, t_input)
+    h = trafo()(x_input, t_input)
 
-    h = tf.keras.layers.Dense(150, activation=activation)(inp)
-    #h = tf.keras.layers.Dropout(0.01)(h)
-    h = tf.keras.layers.Dense(150, activation=activation)(h)
-    #h = tf.keras.layers.Dropout(0.01)(h)
-    h = tf.keras.layers.Dense(150, activation=activation)(h)
-    #h = tf.keras.layers.Dropout(0.01)(h)
-    h = tf.keras.layers.Dense(150, activation=activation)(h)
-    #h = tf.keras.layers.Dropout(0.01)(h)
-    h = tf.keras.layers.Dense(150, activation=activation)(h)
-    #h = tf.keras.layers.Dropout(0.01)(h)
-    h = tf.keras.layers.Dense(150, activation=activation)(h)
-    #h = tf.keras.layers.Dropout(0.01)(h)
-    h = tf.keras.layers.Dense(150, activation=activation)(h)
-    #h = tf.keras.layers.Dropout(0.01)(h)
-    h = tf.keras.layers.Dense(150, activation=activation)(h)
-    #h = tf.keras.layers.Dropout(0.01)(h)
-    h = tf.keras.layers.Dense(150, activation=activation)(h)
-    #h = tf.keras.layers.Dropout(0.01)(h)
-    h = tf.keras.layers.Dense(150, activation=activation)(h)
-    #h = tf.keras.layers.Dropout(0.01)(h)
-    h = tf.keras.layers.Dense(150, activation=activation)(h)
-    #h = tf.keras.layers.Dropout(0.01)(h)
-    h = tf.keras.layers.Dense(150, activation=final_activation)(h)
-    #h = tf.keras.layers.Dropout(0.01)(h)
-    h = tf.keras.layers.Dense(150, activation=activation)(h)
-    #h = tf.keras.layers.Dropout(0.01)(h)
+    for i in range(n_layer):
+        h = tf.keras.layers.Dense(nodes, activation=activation)(h)
+        #h = tf.keras.layers.Dropout(0.01)(h)
+    h = tf.keras.layers.Dense(nodes, activation=final_activation)(h)
+    h = tf.keras.layers.Dense(nodes, activation=activation)(h)
 
     outputs = tf.keras.layers.Dense(1, activation='sigmoid')(h)
 
@@ -333,9 +290,6 @@ def get_charge_data(events, Truth, nCh=True):
 def get_dom_data(events, Truth, detector):
     x = []
     for e in events:
-        for i in range(len(detector)):
-            nH = e[1][i]
-            d = np.append(detector[i], nH)
-            x.append(list(d))
+        x.extend(np.append(detector, e[1].reshape(-1,1), axis=1))
     t = np.repeat(Truth, len(detector), axis=0)
     return np.array(x), t
