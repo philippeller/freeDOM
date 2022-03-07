@@ -66,7 +66,7 @@ class toy_model():
     def survival(self, d):
         return np.exp(-d/self.consts.lambda_a) / (d + self.consts.r_pmt)**2 * (self.consts.r_pmt)**2 / 4 * self.consts.q_eff
 
-    def generate_event(self, truth):
+    def generate_event(self, truth, rand=np.random.RandomState()):
         # generate events
         segments = self.model(*truth)
 
@@ -79,7 +79,7 @@ class toy_model():
         sensors_x_segments[:,:, 4] = distance.cdist(self.detector, segments[:,:3])
 
         n_exp = self.survival(sensors_x_segments[:,:, 4]) * segments[np.newaxis,:,4]
-        n_obs = stats.poisson.rvs(mu=n_exp)
+        n_obs = stats.poisson.rvs(mu=n_exp, random_state=rand)
         sensors[:, 5] = np.sum(n_obs, axis=1)
 
         sensors_x_segments[:, :, 3] = segments[np.newaxis,:,3] + sensors_x_segments[:,:, 4]*self.consts.n_ref/self.consts.c
@@ -88,15 +88,15 @@ class toy_model():
         # unused charge
         sensors_x_segments[:, 5] = 1
         hits = np.repeat(sensors_x_segments, n_obs.flatten(), axis=0)
-        hits[:, 3] += self.pandel.rvs(d=hits[:,4])
+        hits[:, 3] += self.pandel.rvs(d=hits[:,4], random_state=rand)
 
         return np.delete(hits, 4, axis=1), sensors[:, 5]
     
     @staticmethod
-    def sample_sphere(center=np.zeros(3), radius=1):
-        x, y, z = np.random.randn(3)
+    def sample_sphere(center=np.zeros(3), radius=1, rand=np.random.RandomState()):
+        x, y, z = rand.randn(3)
         r = np.sqrt(x**2 + y**2 + z**2)
-        u = np.random.rand()
+        u = rand.rand()
         return (np.array([x, y, z])/r*u**(1/3) * radius) + center
     
     def endpoint(self, x, y, z, t, az, zen, e_cscd, e_trck):
@@ -109,7 +109,7 @@ class toy_model():
         
         return np.array([x, y, z]) + d * length
     
-    def generate_event_sphere(self, n, e_lim=(1,20), inelast_lim=(0,1), t_width=100, N_min=0, center=np.zeros(3), radius=30, contained=True):
+    def generate_event_sphere(self, n, e_lim=(1,20), inelast_lim=(0,1), t_width=100, N_min=0, center=np.zeros(3), radius=30, contained=True, rand=np.random.RandomState()):
         """ Generete events inside a sphere
         
         n : int
@@ -137,12 +137,12 @@ class toy_model():
         for i in tqdm(range(n)):
             while True:
                 while True:
-                    x, y, z = self.sample_sphere(center, radius)
-                    t = np.random.randn() * t_width
-                    az = np.random.uniform(*(0,2*np.pi))
-                    zen = np.arccos(np.random.uniform(*(-1,1)))
-                    E = np.random.uniform(*e_lim)
-                    inelast = np.random.uniform(*inelast_lim)
+                    x, y, z = self.sample_sphere(center, radius, rand=rand)
+                    t = rand.randn() * t_width
+                    az = rand.uniform(*(0,2*np.pi))
+                    zen = np.arccos(rand.uniform(*(-1,1)))
+                    E = rand.uniform(*e_lim)
+                    inelast = rand.uniform(*inelast_lim)
                     Ecscd = E * (1 - inelast)
                     Etrck = E * inelast
 
@@ -155,7 +155,7 @@ class toy_model():
                     else:
                         break
 
-                hits, n_obs = self.generate_event(truth)
+                hits, n_obs = self.generate_event(truth, rand=rand)
                 if np.sum(n_obs) >= N_min:
                     break
 
@@ -166,8 +166,8 @@ class toy_model():
         truths = np.array(truths)
         
         return events, truths
-            
-    def generate_event_box(self, n, e_lim=(1,20), N_min=0, x_lim=(-10,10), y_lim=(-10,10), z_lim=(-10,10), coszen_lim=(-1,1), inelast_lim=(0,1), t_width=100, contained=True):
+    
+    def generate_event_box(self, n, e_lim=(1,20), N_min=0, x_lim=(-10,10), y_lim=(-10,10), z_lim=(-10,10), coszen_lim=(-1,1), inelast_lim=(0,1), t_width=100, contained=True, rand=np.random.RandomState()):
         """ Generete events inside a box
         
         n : int
@@ -193,14 +193,14 @@ class toy_model():
         
             while True:
                 while True:
-                    x = np.random.uniform(*x_lim)
-                    y = np.random.uniform(*y_lim)
-                    z = np.random.uniform(*z_lim)
-                    t = np.random.randn() * t_width
-                    az = np.random.uniform(*(0,2*np.pi))
-                    zen = np.arccos(np.random.uniform(*coszen_lim))
-                    E = np.random.uniform(*e_lim)
-                    inelast = np.random.uniform(*inelast_lim)
+                    x = rand.uniform(*x_lim)
+                    y = rand.uniform(*y_lim)
+                    z = rand.uniform(*z_lim)
+                    t = rand.randn() * t_width
+                    az = rand.uniform(*(0,2*np.pi))
+                    zen = np.arccos(rand.uniform(*coszen_lim))
+                    E = rand.uniform(*e_lim)
+                    inelast = rand.uniform(*inelast_lim)
                     Ecscd = E * (1 - inelast)
                     Etrck = E * inelast
 
@@ -213,7 +213,7 @@ class toy_model():
                     else:
                         break
 
-                hits, n_obs = self.generate_event(truth)
+                hits, n_obs = self.generate_event(truth, rand=rand)
                 if np.sum(n_obs) >= N_min:
                     break
         
