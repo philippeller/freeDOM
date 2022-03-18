@@ -44,8 +44,7 @@ class toy_model():
         collection of emmitters shape (n, 5), each segment with (x, y, z, t, n)
         """    
         length = e_trck * self.consts.trck_e_to_l
-        segments = np.arange(0, 1 + np.floor(length/self.consts.track_step))
-        segments = np.append(segments, segments[-1]+(length%self.consts.track_step)/self.consts.track_step)
+        segments = np.arange(0, 1 +np.ceil(length/self.consts.track_step))
 
         zen = np.pi - zen
         az = az + np.pi
@@ -267,15 +266,23 @@ class toy_model():
         return N_exp_tot - N_obs_tot * np.log(N_exp_tot)
 
 
-    def nllh(self, params, hits, n_obs):
-        ''' DOM charge Formulation '''
+    def nllh(self, params, hits, n_obs, form='per_dom'):
         segments = self.model(*params)
 
-        # total charge part:
-        nllh_N = self.nllh_N_term_dom(segments, n_obs)
+        if form == 'per_dom':
+            # charge part:
+            nllh_N = self.nllh_N_term_dom(segments, n_obs)
+            # hit part:
+            nllh_p = self.nllh_p_term_dom(segments, hits)
+        
+        elif form == 'all_dom':
+            # charge part:
+            nllh_N = self.nllh_N_term_tot(segments, n_obs)
+            # hit part:
+            nllh_p = self.nllh_p_term_tot(segments, hits)
 
-        # hit part:
-        nllh_p = self.nllh_p_term_dom(segments, hits)
+        else:
+            raise NameError("Formulation must be one of ['per_dom', 'all_dom'], not "+form)
 
         # putting both together into extended llh
         return nllh_N + nllh_p
