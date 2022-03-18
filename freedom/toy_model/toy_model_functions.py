@@ -336,3 +336,48 @@ class toy_model():
         g['all_dom_charge_llh'] -= g['all_dom_charge_llh'].min()
 
         return g
+    
+
+    def calc_NN_llhs(self, g, event, truth, chargenet, hitnet):
+        '''
+        Perform an LLH scan in n-dim
+
+        g : dama.GridData
+        event : tuple
+            [hits, n_obs]
+        truth : value of parameters
+        chargenet : all_dom chargenet
+        hitnet : all_dom hitnet
+        toy_experiment : toy_experiment
+        '''
+
+        xxs = np.tile([np.sum(event[1]), np.sum(event[1]>0)], np.prod(g.shape))
+        xxs = xxs.reshape(-1, 2)
+        tts = np.repeat(truth[np.newaxis, :], np.prod(g.shape), axis=0)
+
+        for i in range(g.ndim):
+            var = g.grid.vars[i]
+            tts[:, self.params.index(var)] = g.get_array(var, flat=True)
+
+        llhs = np.nan_to_num(-chargenet.predict((xxs, tts), batch_size=4096))
+
+        g.chargenet_llh = llhs.reshape(g.shape)
+        g.chargenet_llh -= g.chargenet_llh.min()
+
+        xxs = np.repeat(event[0][np.newaxis, :], np.prod(g.shape), axis=0)
+        xxs = xxs.reshape(-1, 6)
+
+
+        tts = np.repeat(tts, len(event[0]), axis=0)
+        llhs = -hitnet.predict((xxs, tts), batch_size=4096)
+
+        llhs = np.nan_to_num(np.sum(llhs.reshape(-1, len(event[0])), axis=1))
+
+        g.hitnet_llh = llhs.reshape(g.shape)
+
+        g.hitnet_llh -= g.hitnet_llh.min()
+
+        g.freedom_llh = g.hitnet_llh + g.chargenet_llh
+        g.freedom_llh -= g.freedom_llh.min()
+
+        return g
