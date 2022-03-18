@@ -30,6 +30,7 @@ class toy_model():
         self.detector = detector
         self.consts = consts
         self.pandel = cpandel_gen(tau=self.consts.tau, lambda_a=self.consts.lambda_a, lambda_s=self.consts.lambda_s, v=self.consts.c/self.consts.n_ref, s=self.consts.s, name='pandel')
+        self.params = ['x', 'y', 'z', 't', 'az', 'zen', 'e_cscd', 'e_trck']
   
     def model(self, x, y, z, t, az, zen, e_cscd, e_trck):
         """Simple event model
@@ -58,8 +59,9 @@ class toy_model():
         X[:,1] = y + segments * dy * self.consts.track_step
         X[:,2] = z + segments * dz * self.consts.track_step
         X[:,3] = t + segments / self.consts.c * self.consts.track_step
-        X[:,4] = self.consts.ns_per_trck_m * length / len(segments)
-        X[0,4] += self.consts.ns_per_cscd_gev * e_cscd
+        X[0,4] = self.consts.ns_per_cscd_gev * e_cscd + self.consts.ns_per_trck_m * np.clip(length, 0, self.consts.track_step)
+        X[1:,4] = self.consts.ns_per_trck_m * self.consts.track_step
+        X[-1,4] *= (length%self.consts.track_step)/self.consts.track_step
 
         return X
 
@@ -150,7 +152,7 @@ class toy_model():
 
                     if contained:
                         endpoint = self.endpoint(*truth)
-                        if np.sum(endpoint - center) <= radius**2:
+                        if np.sum(np.square(endpoint - center)) <= radius**2:
                             break
                     else:
                         break
@@ -227,23 +229,19 @@ class toy_model():
     
     def p_terms(self, segments, hits):
         hits_x_segments = np.repeat(hits[:,np.newaxis,:], segments.shape[0], axis=1)
-        hits_x_segments[:,:, 4] = distance.cdist(hits[:,:3], segments[:,:3])
-        n_exp = self.survival(hits_x_segments[:,:, 4]) * segments[np.newaxis,:,4]
+        d = distance.cdist(hits[:,:3], segments[:,:3])
+        n_exp = self.survival(d) * segments[np.newaxis,:,4]
         # hit time - true time - direct line-of-sight time
-        d_t = hits_x_segments[:,:,3] - segments[np.newaxis,:,3] - hits_x_segments[:,:, 4]*self.consts.n_ref/self.consts.c
+        d_t = hits_x_segments[:,:,3] - segments[np.newaxis,:,3] - d*self.consts.n_ref/self.consts.c
         # Mixture of pdfs of all segments for hit in sensor, weighted by n_exp
-        ps = np.clip(np.nan_to_num(self.pandel.pdf(d_t, d=hits_x_segments[:,:,4]) ), a_min=0, a_max=None) * n_exp
+        ps = np.clip(np.nan_to_num(self.pandel.pdf(d_t, d=d)), a_min=0, a_max=None) * n_exp
         # summing up mixture + pedestal (e.g. noise rate) to avoid log(0)
         return np.sum(ps, axis=1) / np.sum(n_exp, axis=1) + self.consts.noise_level   
 
-
     def N_exp(self, segments):
-        sensors = np.zeros((self.detector.shape[0], 6))
-        sensors[:, :3] = self.detector
-        sensors_x_segments = np.repeat(sensors[:,np.newaxis,:], segments.shape[0], axis=1)
-        sensors_x_segments[:,:, 4] = distance.cdist(self.detector, segments[:,:3])
-        return np.sum(self.survival(sensors_x_segments[:,:, 4]) * segments[:,4], axis=1)
-
+        d = distance.cdist(self.detector, segments[:,:3])
+        n_exp = self.survival(d) * segments[np.newaxis,:,4]
+        return np.sum(n_exp, axis=1)
 
     def nllh_p_term_dom(self, segments, hits):
         ps = self.p_terms(segments, hits)
@@ -260,9 +258,7 @@ class toy_model():
 
         f = N[hits[:, -1].astype(int)]/N_tot
         ps = self.p_terms(segments, hits) * f
-
         return -np.sum(np.log(ps))
-
 
     def nllh_N_term_tot(self, segments, n_obs):
         N_exp_tot = np.sum(self.N_exp(segments))
@@ -295,3 +291,40 @@ class toy_model():
 
         # putting both together into extended llh
         return nllh_N + nllh_p
+    
+    def calc_analytic_llhs(self, g, event, truth):
+        '''
+        Perform an LLH scan in n-dim
+
+        g : dama.GridData
+        event : tuple
+            [hits, n_obs]
+        truth : value of parameters
+        '''
+
+        g['per_dom_hit_term'] = np.empty(g.shape)
+        g['per_dom_charge_terms'] = np.empty(g.shape)
+        g['all_dom_charge_hit_terms'] = np.empty(g.shape)
+        g['all_dom_charge_terms'] = np.empty(g.shape)
+
+        p = np.copy(truth)
+
+        for idx in tqdm(np.ndindex(g.shape)):
+            for i in range(g.ndim):
+                var = g.grid.vars[i]
+                p[self.params.index(var)] = g[var][idx]
+            segments = self.model(*p)
+            g['per_dom_hit_term'][idx] = self.nllh_p_term_dom(segments, event[0])
+            g['per_dom_charge_terms'][idx] = self.nllh_N_term_dom(segments, event[1])
+            g['all_dom_charge_hit_terms'][idx] = self.nllh_p_term_tot(segments, event[0])
+            g['all_dom_charge_terms'][idx] = self.nllh_N_term_tot(segments, event[1])   
+        g['per_dom_hit_term'] -= g['per_dom_hit_term'].min()
+        g['per_dom_charge_terms'] -= g['per_dom_charge_terms'].min()
+        g['per_dom_llh'] = g['per_dom_hit_term'] + g['per_dom_charge_terms']
+        g['all_dom_charge_hit_terms'] -= g['all_dom_charge_hit_terms'].min()
+        g['all_dom_charge_terms'] -= g['all_dom_charge_terms'].min()
+        g['all_dom_charge_llh'] = g['all_dom_charge_hit_terms'] + g['all_dom_charge_terms']
+        g['per_dom_llh'] -= g['per_dom_llh'].min()
+        g['all_dom_charge_llh'] -= g['all_dom_charge_llh'].min()
+
+        return g
