@@ -44,7 +44,8 @@ class toy_model():
         collection of emmitters shape (n, 5), each segment with (x, y, z, t, n)
         """    
         length = e_trck * self.consts.trck_e_to_l
-        segments = np.arange(0, 1 +np.ceil(length/self.consts.track_step))
+        segments = np.arange(0, 1 + np.floor(length/self.consts.track_step))
+        segments = np.append(segments, segments[-1]+(length%self.consts.track_step)/self.consts.track_step)
 
         zen = np.pi - zen
         az = az + np.pi
