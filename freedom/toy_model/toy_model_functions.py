@@ -215,7 +215,8 @@ class toy_model():
                 if np.sum(n_obs) >= N_min:
                     break
         
-            ak_array.append({'MC_truth': {'x':x, 'y':y, 'z':z, 't':t, 'az':az, 'zen':zen, 'energy':energy, 'inelast':inelast}, 'photons' : {'x':hits[:,0], 'y':hits[:,1], 'z':hits[:,2], 't':hits[:,3], 'sensor_idx':hits[:,5]}, 'n_obs':n_obs})
+            ak_array.append({'event_idx':i, 'MC_truth': {'x':x, 'y':y, 'z':z, 't':t, 'az':az, 'zen':zen, 'energy':energy, 'inelast':inelast}, 'photons' : {'x':hits[:,0], 'y':hits[:,1], 'z':hits[:,2], 't':hits[:,3], 'sensor_idx':hits[:,5]}, 'n_obs':n_obs})
+
         
         ak_array = ak.from_iter(ak_array)
         
@@ -241,12 +242,12 @@ class toy_model():
         if outfile is not None:
             ak.to_parquet(ak_array, outfile)
             t = pq.read_table(outfile)
-            meta = t.schema.metadata
-            meta = meta if not meta is None else {}
-            meta['gen_config'] = json.dumps(meta)
-            meta['exp_config'] = json.dumps(self.config)
-            meta['detector'] = json.dumps(self.detector.tolist())
-            t = t.replace_schema_metadata(meta)
+            m = t.schema.metadata
+            m = m if not m is None else {}
+            m['gen_config'] = json.dumps(meta)
+            m['exp_config'] = json.dumps(self.config)
+            m['detector'] = json.dumps(self.detector.tolist())
+            t = t.replace_schema_metadata(m)
             pq.write_table(t, outfile)
         
         return ak_array, meta

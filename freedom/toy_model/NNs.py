@@ -3,7 +3,7 @@ import tensorflow as tf
 import tensorflow.keras.backend as K
 import tensorflow_addons as tfa
 from sklearn.model_selection import train_test_split
-
+import awkward as ak
 
 class DataGenerator(tf.keras.utils.Sequence):
     def __init__(self, x, t, batch_size=4096, shuffle='free', time_spread=5):
@@ -273,23 +273,33 @@ def get_cmodel(x_shape, t_shape, trafo, activation='elu', final_activation='expo
     
     return model
 
+def make_truth_array(events):
+    return np.stack([events.MC_truth.x.to_numpy(),
+          events.MC_truth.y.to_numpy(),
+          events.MC_truth.z.to_numpy(),
+          events.MC_truth.t.to_numpy(),
+          events.MC_truth.az.to_numpy(),
+          events.MC_truth.zen.to_numpy(),
+          events.MC_truth.energy.to_numpy() * events.MC_truth.inelast.to_numpy(),
+          events.MC_truth.energy.to_numpy() * (1 - events.MC_truth.inelast.to_numpy())],
+          axis=1) 
 
-def get_hit_data(events, Truth):
-    x = np.concatenate([d for d in events[:, 0]])
-    t = np.repeat(Truth, [len(d) for d in events[:, 0]], axis=0)
+def get_hit_data(events):
+    x = ak.ravel(events.photons[['x', 'y', 'z', 't']]).to_numpy().reshape(4, -1).T
+    truth = make_truth_array(events)
+    t = np.repeat(truth, ak.count(events.photons.t, axis=1).to_numpy(), axis=0)
     return x, t
 
-def get_charge_data(events, Truth, nCh=True):
+def get_charge_data(events, nCh=True):
     if nCh:
-        x = np.array([[np.sum(d), np.sum(d > 0)] for d in events[:, 1]])
+        x = np.stack([np.sum(events.n_obs.to_numpy(), axis=1), np.sum(events.n_obs.to_numpy()>0, axis=1)], axis=1)
     else:
-        x = np.array([np.sum(d) for d in events[:, 1]]).reshape((len(events), 1))
-    t = Truth
+        x = np.sum(events.n_obs.to_numpy(), axis=1)[:, np.newaxis]
+    t = make_truth_array(events)
     return x, t
 
-def get_dom_data(events, Truth, detector):
-    x = []
-    for e in events:
-        x.extend(np.append(detector, e[1].reshape(-1,1), axis=1))
-    t = np.repeat(Truth, len(detector), axis=0)
-    return np.array(x), t
+def get_dom_data(events, detector):
+    x = np.hstack([np.repeat(detector[np.newaxis, :], len(events), axis=0).reshape(-1, 3), ak.ravel(events.n_obs).to_numpy()[:, np.newaxis]])
+    truth = make_truth_array(events)
+    t = np.repeat(truth, len(detector), axis=0)
+    return x, t
