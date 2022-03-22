@@ -314,19 +314,6 @@ class toy_model():
 
         # putting both together into extended llh
         return nllh_N + nllh_p
-
-    def nllh_formulation2(self, params, hits, n_obs):
-        ''' Total charge Formulation '''
-        segments = self.model(*params)
-
-        # total charge part:
-        nllh_N = self.nllh_N_term_tot(segments, n_obs)
-
-        # hit part:
-        nllh_p = self.nllh_p_term_tot(segments, hits)
-
-        # putting both together into extended llh
-        return nllh_N + nllh_p
     
     def calc_analytic_llhs(self, g, event, truth):
         '''
