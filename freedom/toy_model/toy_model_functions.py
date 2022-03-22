@@ -6,6 +6,8 @@ from tqdm import tqdm
 import awkward as ak
 import pyarrow.parquet as pq
 import json
+import getpass
+import os
 
 std_config = {}
 std_config['lambda_a'] = 100 # Absorbtion length
@@ -231,13 +233,14 @@ class toy_model():
             meta['center'] = center
             meta['radius'] = radius
         meta['n'] = n
-        meta['outfile'] = outfile
         meta['gamma'] = gamma
         meta['e_lim'] = e_lim
         meta['inelast_lim'] = inelast_lim
         meta['t_width'] = t_width
         meta['N_min'] = N_min
         meta['contained'] = contained
+        meta['user'] = getpass.getuser()
+        meta['system'] = ' '.join(os.uname())
         
         if outfile is not None:
             ak.to_parquet(ak_array, outfile)
