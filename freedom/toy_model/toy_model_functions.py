@@ -392,8 +392,8 @@ class toy_model():
         g.chargenet_llh = llhs.reshape(g.shape)
         g.chargenet_llh -= g.chargenet_llh.min()
 
-        xxs = np.repeat(event[0][np.newaxis, :], np.prod(g.shape), axis=0)
-        xxs = xxs.reshape(-1, 6)
+        xxs = np.repeat(event[0][:, :4][np.newaxis, :], np.prod(g.shape), axis=0)
+        xxs = xxs.reshape(-1, 4)
 
 
         tts = np.repeat(tts, len(event[0]), axis=0)
