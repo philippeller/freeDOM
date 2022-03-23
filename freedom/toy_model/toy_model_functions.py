@@ -124,7 +124,7 @@ class toy_model():
         ext = high - low
         return (low - fraction * ext, high + fraction * ext)
     
-    def generate_events(self, n, outfile=None, gamma=-2, gen_volume="box", e_lim=(1,20), N_min=0, coszen_lim=(-1,1), inelast_lim=(0,1), t_width=100, contained=True, rand=0, **kwargs):
+    def generate_events(self, n, outfile=None, gamma=-2, gen_volume="box", e_lim=(1,20), min_hits=0, coszen_lim=(-1,1), inelast_lim=(0,1), t_width=100, contained=True, rand=0, **kwargs):
         """ Generete events inside a box
         
         n : int
@@ -144,7 +144,7 @@ class toy_model():
             lmits for inelasticity distribution
         t_width : float
             width of time distribution
-        N_min : int
+        min_hits : int
             minimum number of pulses
         contained : bool
             track enpoint must be contained within generation volume
@@ -214,41 +214,42 @@ class toy_model():
 
                 hits, n_obs = self.generate_event(params, rand=rand)
                 
-                if np.sum(n_obs) >= N_min:
+                if np.sum(n_obs) >= min_hits:
                     break
         
-            ak_array.append({'event_idx':i, 'MC_truth': {'x':x, 'y':y, 'z':z, 't':t, 'az':az, 'zen':zen, 'energy':energy, 'inelast':inelast}, 'photons' : {'x':hits[:,0], 'y':hits[:,1], 'z':hits[:,2], 't':hits[:,3], 'sensor_idx':hits[:,5]}, 'n_obs':n_obs})
+            ak_array.append({'event_id':i, 'mc_truth': {'x':x, 'y':y, 'z':z, 't':t, 'az':az, 'zen':zen, 'energy':energy, 'inelast':inelast}, 'photons' : {'x':hits[:,0], 'y':hits[:,1], 'z':hits[:,2], 't':hits[:,3], 'sensor_id':hits[:,5]}, 'n_obs':n_obs})
 
         
         ak_array = ak.from_iter(ak_array)
         
         meta = {}
-        meta['rand'] = random_state
-        meta['gen_volume'] = gen_volume
+        meta['generator'] = {}
+        meta['generator']['rand'] = random_state
+        meta['generator']['gen_volume'] = gen_volume
         if gen_volume == "box":
-            meta['x_lim'] = x_lim
-            meta['y_lim'] = y_lim
-            meta['z_lim'] = z_lim
+            meta['generator']['x_lim'] = x_lim
+            meta['generator']['y_lim'] = y_lim
+            meta['generator']['z_lim'] = z_lim
         elif gen_volume == "sphere":
-            meta['center'] = center
-            meta['radius'] = radius
-        meta['n'] = n
-        meta['gamma'] = gamma
-        meta['e_lim'] = e_lim
-        meta['inelast_lim'] = inelast_lim
-        meta['t_width'] = t_width
-        meta['N_min'] = N_min
-        meta['contained'] = contained
-        meta['user'] = getpass.getuser()
-        meta['system'] = ' '.join(os.uname())
-        
+            meta['generator']['center'] = center
+            meta['generator']['radius'] = radius
+        meta['generator']['n'] = n
+        meta['generator']['gamma'] = gamma
+        meta['generator']['e_lim'] = e_lim
+        meta['generator']['inelast_lim'] = inelast_lim
+        meta['generator']['t_width'] = t_width
+        meta['generator']['min_hits'] = min_hits
+        meta['generator']['contained'] = contained
+        meta['env'] = {}
+        meta['env']['user'] = getpass.getuser()
+        meta['env']['system'] = ' '.join(os.uname())
+        meta['experiment'] = self.config
         if outfile is not None:
             ak.to_parquet(ak_array, outfile)
             t = pq.read_table(outfile)
             m = t.schema.metadata
             m = m if not m is None else {}
-            m['gen_config'] = json.dumps(meta)
-            m['exp_config'] = json.dumps(self.config)
+            m['config_freedom'] = json.dumps(meta)
             m['detector'] = json.dumps(self.detector.tolist())
             t = t.replace_schema_metadata(m)
             pq.write_table(t, outfile)

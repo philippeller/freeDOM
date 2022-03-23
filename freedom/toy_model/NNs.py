@@ -274,14 +274,14 @@ def get_cmodel(x_shape, t_shape, trafo, activation='elu', final_activation='expo
     return model
 
 def make_truth_array(events):
-    return np.stack([events.MC_truth.x.to_numpy(),
-          events.MC_truth.y.to_numpy(),
-          events.MC_truth.z.to_numpy(),
-          events.MC_truth.t.to_numpy(),
-          events.MC_truth.az.to_numpy(),
-          events.MC_truth.zen.to_numpy(),
-          events.MC_truth.energy.to_numpy() * events.MC_truth.inelast.to_numpy(),
-          events.MC_truth.energy.to_numpy() * (1 - events.MC_truth.inelast.to_numpy())],
+    return np.stack([events.mc_truth.x.to_numpy(),
+          events.mc_truth.y.to_numpy(),
+          events.mc_truth.z.to_numpy(),
+          events.mc_truth.t.to_numpy(),
+          events.mc_truth.az.to_numpy(),
+          events.mc_truth.zen.to_numpy(),
+          events.mc_truth.energy.to_numpy() * events.mc_truth.inelast.to_numpy(),
+          events.mc_truth.energy.to_numpy() * (1 - events.mc_truth.inelast.to_numpy())],
           axis=1) 
 
 def get_hit_data(events):
