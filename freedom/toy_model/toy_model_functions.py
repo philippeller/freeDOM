@@ -49,7 +49,8 @@ class toy_model():
         e_cscd = energy * inelast
         
         length = e_trck * self.config['trck_e_to_l']
-        segments = np.arange(0, 1 +np.ceil(length/self.config['track_step']))
+        segments = np.arange(0, 1 + np.floor(length/self.config['track_step']))
+        segments = np.append(segments, segments[-1]+(length%self.consts.track_step)/self.consts.track_step)
 
         zen = np.pi - zen
         az = az + np.pi
@@ -124,7 +125,7 @@ class toy_model():
         ext = high - low
         return (low - fraction * ext, high + fraction * ext)
     
-    def generate_events(self, n, outfile=None, gamma=-2, gen_volume="box", e_lim=(1,20), N_min=0, coszen_lim=(-1,1), inelast_lim=(0,1), t_width=100, contained=True, rand=0, **kwargs):
+    def generate_events(self, n, outfile=None, gamma=-2, gen_volume="box", e_lim=(1,20), N_min=0, N_max=1000, coszen_lim=(-1,1), inelast_lim=(0,1), t_width=100, contained=True, rand=0, **kwargs):
         """ Generete events inside a box
         
         n : int
@@ -214,7 +215,7 @@ class toy_model():
 
                 hits, n_obs = self.generate_event(params, rand=rand)
                 
-                if np.sum(n_obs) >= N_min:
+                if np.sum(n_obs) >= N_min and np.sum(n_obs) <= N_max:
                     break
         
             ak_array.append({'event_idx':i, 'MC_truth': {'x':x, 'y':y, 'z':z, 't':t, 'az':az, 'zen':zen, 'energy':energy, 'inelast':inelast}, 'photons' : {'x':hits[:,0], 'y':hits[:,1], 'z':hits[:,2], 't':hits[:,3], 'sensor_idx':hits[:,5]}, 'n_obs':n_obs})
