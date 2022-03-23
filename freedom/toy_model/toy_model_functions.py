@@ -50,7 +50,7 @@ class toy_model():
         
         length = e_trck * self.config['trck_e_to_l']
         segments = np.arange(0, 1 + np.floor(length/self.config['track_step']))
-        segments = np.append(segments, segments[-1]+(length%self.consts.track_step)/self.consts.track_step)
+        segments = np.append(segments, segments[-1]+(length%self.config['track_step'])/self.config['track_step'])
 
         zen = np.pi - zen
         az = az + np.pi
