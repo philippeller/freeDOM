@@ -175,7 +175,7 @@ class toy_model():
             y_lim = kwargs.get('y_lim', self.limits(1, padding))
             z_lim = kwargs.get('z_lim', self.limits(2, padding))
         elif gen_volume == "sphere":
-            center = kwargs.get('center', np.mean(self.detector, axis=1))
+            center = kwargs.get('center', np.mean(self.detector, axis=0))
             radius = kwargs.get('radius', np.max(np.sum(np.square(self.detector - center), axis=1)) * (1 + padding))
         else:
             raise Exception("unknown generation volume %s, must be ['box', 'sphere']"%gen_volume)
@@ -220,7 +220,7 @@ class toy_model():
                 if np.sum(n_obs) >= min_hits and np.sum(n_obs) <= max_hits:
                     break
         
-            ak_array.append({'event_id':i, 'mc_truth': {'x':x, 'y':y, 'z':z, 't':t, 'az':az, 'zen':zen, 'energy':energy, 'inelast':inelast}, 'photons' : {'x':hits[:,0], 'y':hits[:,1], 'z':hits[:,2], 't':hits[:,3], 'sensor_id':hits[:,5]}, 'n_obs':n_obs})
+            ak_array.append({'event_id':i, 'mc_truth': {'x':x, 'y':y, 'z':z, 't':t, 'az':az, 'zen':zen, 'energy':energy, 'inelast':inelast}, 'photons' : {'x':hits[:,0], 'y':hits[:,1], 'z':hits[:,2], 't':hits[:,3], 'q':hits[:,4], 'sensor_id':hits[:,5]}, 'n_obs':n_obs})
 
         
         ak_array = ak.from_iter(ak_array)
@@ -384,8 +384,8 @@ class toy_model():
         g.chargenet_llh = llhs.reshape(g.shape)
         g.chargenet_llh -= g.chargenet_llh.min()
 
-        xxs = np.repeat(event[0][:, :4][np.newaxis, :], np.prod(g.shape), axis=0)
-        xxs = xxs.reshape(-1, 4)
+        xxs = np.repeat(event[0][np.newaxis, :], np.prod(g.shape), axis=0)
+        xxs = xxs.reshape(-1, 6)
 
 
         tts = np.repeat(tts, len(event[0]), axis=0)
