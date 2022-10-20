@@ -84,7 +84,7 @@ class DataGenerator(tf.keras.utils.Sequence):
 
 
 class charge_trafo(tf.keras.layers.Layer):
-    def call(self, charges, theta):     
+    def call(self, charges, theta, dets=None):     
         out = tf.stack([
                  charges[:,0],
                  charges[:,1],
@@ -100,7 +100,7 @@ class charge_trafo(tf.keras.layers.Layer):
         return out    
 
 class charge_trafo_3D(tf.keras.layers.Layer):
-    def call(self, charges, theta):
+    def call(self, charges, theta, dets=None):
         out = tf.stack([
                  charges[:,0],
                  charges[:,1],
@@ -118,7 +118,7 @@ class charge_trafo_3D(tf.keras.layers.Layer):
         return out
 
 class hit_trafo(tf.keras.layers.Layer):
-    def call(self, hits, theta, dets=None):
+    def call(self, hits, theta):
         dx = theta[:,0] - hits[:,0]
         dy = theta[:,1] - hits[:,1]
         dist = tf.math.sqrt(tf.math.square(dx) + tf.math.square(dy))
@@ -143,7 +143,7 @@ class hit_trafo(tf.keras.layers.Layer):
         return out
 
 class hit_trafo_3D(tf.keras.layers.Layer):
-    def call(self, hits, theta, dets=None):
+    def call(self, hits, theta):
         
         dx = theta[:, 0] - hits[:, 0]
         dy = theta[:, 1] - hits[:, 1]
@@ -159,9 +159,9 @@ class hit_trafo_3D(tf.keras.layers.Layer):
         dir_z = tf.math.cos(theta[:, 5])
         
         out = tf.stack([
-                 hits[:,0],
-                 hits[:,1],
-                 hits[:,2],
+                 hits[:,0], #
+                 hits[:,1], #
+                 hits[:,2], #
                  hits[:,3],
                  dist,
                  dx/dist,
@@ -205,7 +205,7 @@ class dom_trafo(tf.keras.layers.Layer):
         return out    
 
 class dom_trafo_3D(tf.keras.layers.Layer):
-    def call(self, doms, theta, dets=None):
+    def call(self, doms, theta):
         
         dx = theta[:, 0] - doms[:, 0]
         dy = theta[:, 1] - doms[:, 1]
@@ -217,9 +217,9 @@ class dom_trafo_3D(tf.keras.layers.Layer):
         dir_z = tf.math.cos(theta[:, 5])
         
         out = tf.stack([
-                 doms[:,0],
-                 doms[:,1],
-                 doms[:,2],
+                 doms[:,0], #
+                 doms[:,1], #
+                 doms[:,2], #
                  tf.math.log1p(doms[:,3]),
                  tf.math.log1p(dist),
                  dx/dist,
@@ -274,18 +274,21 @@ def get_cmodel(x_shape, t_shape, trafo, activation='elu', final_activation='expo
     return model
 
 def make_truth_array(events):
-    return np.stack([events.mc_truth.x.to_numpy(),
+    return np.stack([
+          events.mc_truth.x.to_numpy(),
           events.mc_truth.y.to_numpy(),
           events.mc_truth.z.to_numpy(),
           events.mc_truth.t.to_numpy(),
           events.mc_truth.az.to_numpy(),
           events.mc_truth.zen.to_numpy(),
-          events.mc_truth.energy.to_numpy() * events.mc_truth.inelast.to_numpy(),
-          events.mc_truth.energy.to_numpy() * (1 - events.mc_truth.inelast.to_numpy())],
-          axis=1) 
+          #events.mc_truth.energy.to_numpy() * events.mc_truth.inelast.to_numpy(),
+          #events.mc_truth.energy.to_numpy() * (1 - events.mc_truth.inelast.to_numpy())
+          events.mc_truth.energy.to_numpy(),
+          events.mc_truth.inelast.to_numpy()
+                    ],axis=1)
 
 def get_hit_data(events):
-    x = ak.ravel(events.photons[['x', 'y', 'z', 't']]).to_numpy().reshape(4, -1).T
+    x = ak.ravel(events.photons[['x', 'y', 'z', 't', 'q', 'sensor_id']]).to_numpy().reshape(6, -1).T
     truth = make_truth_array(events)
     t = np.repeat(truth, ak.count(events.photons.t, axis=1).to_numpy(), axis=0)
     return x, t
